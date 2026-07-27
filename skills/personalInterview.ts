@@ -24,6 +24,21 @@ Ask open-ended questions about:
 Continue until all required fields have enough information.
 
 Minimum 5 questions, maximum 8 questions.
+
+When complete, the "profile" object must use exactly these field names —
+do not rename, rephrase, or substitute synonyms for them:
+{
+  "name": string,
+  "role": string,
+  "leadershipStyle": string,
+  "communicationStyle": string,
+  "decisionStyle": string,
+  "values": string[],
+  "delegationRules": string[],
+  "approvalRules": string[],
+  "conflictResolution": string (optional),
+  "generalPrinciples": string[] (optional)
+}
   `.trim(),
 
   metadata: {

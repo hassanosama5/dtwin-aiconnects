@@ -24,6 +24,21 @@ Ask questions about:
 Continue until all required fields have enough information.
 
 Minimum 5 questions, maximum 8 questions.
+
+When complete, the "profile" object must use exactly these field names —
+do not rename, rephrase, or substitute synonyms for them:
+{
+  "name": string,
+  "description": string (optional),
+  "goal": string,
+  "timeline": string (optional),
+  "priorities": string[],
+  "constraints": string[],
+  "decisionRules": string[],
+  "escalationRules": string[],
+  "tradeoffs": string[] (optional),
+  "currentChallenges": string[] (optional)
+}
   `.trim(),
 
   metadata: {
