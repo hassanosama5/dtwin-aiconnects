@@ -66,11 +66,12 @@ export interface InterviewResponse {
 }
 
 // Decision Agent
+// conversationHistory/personProfile/projectProfile are NOT here — they arrive
+// exclusively via AgentContext, assembled by Middleware before execute() runs.
 export interface DecisionRequest {
   question: string;
   twinId: string;
   projectId: string;
-  conversationHistory: ChatMessage[];
 }
 
 export interface DecisionResponse {
@@ -80,10 +81,9 @@ export interface DecisionResponse {
 }
 
 // Review Agent
+// personProfile/projectProfile are NOT here — same AgentContext passed to Decision.
 export interface ReviewRequest {
   decision: DecisionResponse;
-  personProfile: PersonProfile;
-  projectProfile: ProjectProfile;
 }
 
 export interface ReviewResponse {

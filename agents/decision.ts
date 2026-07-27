@@ -1,44 +1,54 @@
 /**
  * Decision Agent
  *
- * Answers questions as the represented person would.
- * Phase 2 implementation placeholder.
+ * Answers questions as the represented person's Decision Twin. Pure
+ * reasoning agent: declares no tools, because all of its context (Personal
+ * Profile, Project Profile, Conversation History) arrives pre-assembled via
+ * AgentContext from Middleware — it never fetches anything itself.
  */
 
-import { DecisionRequest, DecisionResponse, AgentResponse } from '../types/agent';
+import { BaseAgent } from './BaseAgent';
+import { ClaudeMessage } from '../services/anthropic';
 import { decisionPrompt } from '../prompts/decision';
-import { logger } from '../utils/logger';
+import { decisionReasoningSkill } from '../skills/decisionReasoning';
+import { DecisionResponseSchema } from '../utils/validation';
+import { AgentContext, DecisionRequest, DecisionResponse } from '../types/agent';
 
-export async function decisionAgent(
-  request: DecisionRequest
-): Promise<AgentResponse<DecisionResponse>> {
-  const startTime = performance.now();
+export class DecisionAgent extends BaseAgent<DecisionRequest, DecisionResponse> {
+  constructor() {
+    super({
+      name: 'Decision',
+      description: "Answers questions as the represented person's Decision Twin.",
+      responsibility:
+        'Reason only from the Personal Profile, Project Profile, and Conversation History provided in context. Never invent missing preferences.',
+      systemPrompt: decisionPrompt,
+      skills: [decisionReasoningSkill],
+      tools: [],
+      outputSchema: DecisionResponseSchema,
+      errorOutput: { answer: '', reasoning: [], confidence: 0 },
+    });
+  }
 
-  logger.agent('Decision', 'Processing question');
+  protected buildMessages(request: DecisionRequest, context?: AgentContext): ClaudeMessage[] {
+    // Layering matches PROJECT_SPEC.md §6 "Shared Context": Personal Profile
+    // → Project Profile → Conversation History → Current Question.
+    const sections: string[] = [];
 
-  try {
-    // TODO: Phase 2 - Implement decision logic
-    // 1. Load person profile
-    // 2. Load project profile
-    // 3. Load conversation history
-    // 4. Build context
-    // 5. Call Anthropic service with decision skill
-    // 6. Parse and validate response
+    if (context?.personProfile) {
+      sections.push(`Personal Profile:\n${JSON.stringify(context.personProfile, null, 2)}`);
+    }
+    if (context?.projectProfile) {
+      sections.push(`Project Profile:\n${JSON.stringify(context.projectProfile, null, 2)}`);
+    }
+    if (context?.conversationHistory?.length) {
+      const history = context.conversationHistory
+        .map((message) => `${message.role}: ${message.content}`)
+        .join('\n');
+      sections.push(`Conversation History:\n${history}`);
+    }
 
-    throw new Error('Decision agent not yet implemented');
-  } catch (error) {
-    logger.error('Decision agent failed', error);
+    sections.push(`Question: ${request.question}`);
 
-    return {
-      success: false,
-      agent: 'Decision',
-      output: {
-        answer: '',
-        reasoning: [],
-        confidence: 0,
-      },
-      executionTime: performance.now() - startTime,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    };
+    return [{ role: 'user', content: sections.join('\n\n') }];
   }
 }

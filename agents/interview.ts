@@ -1,39 +1,98 @@
 /**
  * Interview Agent
  *
- * Conducts adaptive interviews to build profiles.
- * Phase 2 implementation placeholder.
+ * Conducts adaptive interviews to build Personal and Project profiles.
+ * Declares ProfileTool, ProjectTool, and ValidationTool as the only tools
+ * it owns; picks between the Personal and Project Interview skills per
+ * request instead of loading both at once.
  */
 
-import { InterviewRequest, InterviewResponse, AgentResponse } from '../types/agent';
+import { BaseAgent } from './BaseAgent';
+import { ClaudeMessage } from '../services/anthropic';
 import { interviewPrompt } from '../prompts/interview';
-import { logger } from '../utils/logger';
+import { personalInterviewSkill } from '../skills/personalInterview';
+import { projectInterviewSkill } from '../skills/projectInterview';
+import { Skill } from '../skills/types';
+import { ProfileTool } from '../tools/profile';
+import { ProjectTool } from '../tools/project';
+import { ValidationTool } from '../tools/validateProfileCompleteness';
+import { InterviewResponseSchema } from '../utils/validation';
+import { InterviewRequest, InterviewResponse } from '../types/agent';
+import { PersonProfile, ProjectProfile } from '../types/profile';
 
-export async function interviewAgent(
-  request: InterviewRequest
-): Promise<AgentResponse<InterviewResponse>> {
-  const startTime = performance.now();
+export class InterviewAgent extends BaseAgent<InterviewRequest, InterviewResponse> {
+  constructor() {
+    super({
+      name: 'Interview',
+      description: 'Conducts adaptive interviews to build Personal and Project profiles.',
+      responsibility:
+        'Ask questions until a profile is complete. Never invent information. Never assume missing information.',
+      systemPrompt: interviewPrompt,
+      skills: [personalInterviewSkill, projectInterviewSkill],
+      tools: [ProfileTool, ProjectTool, ValidationTool],
+      outputSchema: InterviewResponseSchema,
+      errorOutput: { complete: false },
+    });
+  }
 
-  logger.agent('Interview', `Starting ${request.type} interview`);
+  protected selectSkills(request: InterviewRequest): Skill[] {
+    return request.type === 'personal' ? [personalInterviewSkill] : [projectInterviewSkill];
+  }
 
-  try {
-    // TODO: Phase 2 - Implement interview logic
-    // 1. Load appropriate skill (personal or project)
-    // 2. Build conversation context
-    // 3. Call Anthropic service
-    // 4. Validate profile completeness
-    // 5. Return next question or completed profile
+  protected buildMessages(request: InterviewRequest): ClaudeMessage[] {
+    const transcript: ClaudeMessage[] = request.messages.map((message) => ({
+      role: message.role === 'agent' ? 'assistant' : 'user',
+      content: message.content,
+    }));
 
-    throw new Error('Interview agent not yet implemented');
-  } catch (error) {
-    logger.error('Interview agent failed', error);
+    // Nothing exchanged yet — kick the interview off with the first question.
+    if (transcript.length === 0) {
+      return [{ role: 'user', content: 'Begin the interview.' }];
+    }
 
-    return {
-      success: false,
-      agent: 'Interview',
-      output: { complete: false },
-      executionTime: performance.now() - startTime,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    };
+    return transcript;
+  }
+
+  protected async postProcess(
+    parsed: InterviewResponse,
+    request: InterviewRequest
+  ): Promise<InterviewResponse> {
+    if (!parsed.complete || !parsed.profile) {
+      return parsed;
+    }
+
+    const skill = request.type === 'personal' ? personalInterviewSkill : projectInterviewSkill;
+    const requiredFields = (skill.metadata?.requiredFields as string[] | undefined) ?? [];
+    const completeness = ValidationTool.checkCompleteness(
+      requiredFields,
+      parsed.profile as unknown as Record<string, unknown>
+    );
+
+    if (!completeness.complete) {
+      this.logger.warning(
+        'Interview Agent claimed completion but ValidationTool disagreed',
+        completeness
+      );
+      return { complete: false, missingFields: completeness.missingFields };
+    }
+
+    if (request.type === 'personal') {
+      const profile = parsed.profile as PersonProfile;
+      const saveResult = await ProfileTool.save(profile.name, profile.role, profile);
+      if (!saveResult.success) {
+        throw new Error(saveResult.error);
+      }
+    } else {
+      if (!request.twinId) {
+        throw new Error('Cannot save a project profile without a twinId');
+      }
+      const profile = parsed.profile as ProjectProfile;
+      const saveResult = await ProjectTool.save(request.twinId, profile.name, profile);
+      if (!saveResult.success) {
+        throw new Error(saveResult.error);
+      }
+    }
+
+    return parsed;
   }
 }

@@ -1,44 +1,43 @@
 /**
  * Review Agent
  *
- * Validates decision agent responses.
- * Phase 2 implementation placeholder.
+ * Validates the Decision Agent's response before it reaches the user.
+ * Declares no tools — it only reviews structured outputs it's given.
  */
 
-import { ReviewRequest, ReviewResponse, AgentResponse } from '../types/agent';
+import { BaseAgent } from './BaseAgent';
+import { ClaudeMessage } from '../services/anthropic';
 import { reviewPrompt } from '../prompts/review';
-import { logger } from '../utils/logger';
+import { answerReviewSkill } from '../skills/answerReview';
+import { ReviewResponseSchema } from '../utils/validation';
+import { AgentContext, ReviewRequest, ReviewResponse } from '../types/agent';
 
-export async function reviewAgent(
-  request: ReviewRequest
-): Promise<AgentResponse<ReviewResponse>> {
-  const startTime = performance.now();
+export class ReviewAgent extends BaseAgent<ReviewRequest, ReviewResponse> {
+  constructor() {
+    super({
+      name: 'Review',
+      description: "Validates the Decision Agent's response before it reaches the user.",
+      responsibility:
+        'Verify the answer is supported by the provided profiles, evaluate confidence, and decide whether to escalate to the represented person. Never modify the answer — only approve or reject it.',
+      systemPrompt: reviewPrompt,
+      skills: [answerReviewSkill],
+      tools: [],
+      outputSchema: ReviewResponseSchema,
+      errorOutput: { approved: false, confidence: 0, requiresHuman: true, reason: 'Review failed' },
+    });
+  }
 
-  logger.agent('Review', 'Validating decision');
+  protected buildMessages(request: ReviewRequest, context?: AgentContext): ClaudeMessage[] {
+    const sections: string[] = [];
 
-  try {
-    // TODO: Phase 2 - Implement review logic
-    // 1. Analyze decision against profiles
-    // 2. Check for contradictions
-    // 3. Evaluate confidence
-    // 4. Determine if human-in-the-loop needed
-    // 5. Return approval decision
+    if (context?.personProfile) {
+      sections.push(`Personal Profile:\n${JSON.stringify(context.personProfile, null, 2)}`);
+    }
+    if (context?.projectProfile) {
+      sections.push(`Project Profile:\n${JSON.stringify(context.projectProfile, null, 2)}`);
+    }
+    sections.push(`Decision Agent Response:\n${JSON.stringify(request.decision, null, 2)}`);
 
-    throw new Error('Review agent not yet implemented');
-  } catch (error) {
-    logger.error('Review agent failed', error);
-
-    return {
-      success: false,
-      agent: 'Review',
-      output: {
-        approved: false,
-        confidence: 0,
-        requiresHuman: true,
-        reason: 'Review failed',
-      },
-      executionTime: performance.now() - startTime,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    };
+    return [{ role: 'user', content: sections.join('\n\n') }];
   }
 }
