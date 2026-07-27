@@ -164,24 +164,35 @@ Confirmed by inspection — all of the following already exist and work:
 
 ## Phase 2 — Backend Architecture
 
-Goal: make all four agents real, wired to prompts/skills/tools, callable end-to-end with no UI involved yet (tested via scripts/console, not screens).
+Goal: make all four agents real, wired to prompts/skills/tools, callable end-to-end with no UI involved yet (tested via scripts/console, not screens). Following the architecture refactor documented in `ARCHITECTURE.md`, agents are class-based (`BaseAgent` subclasses) constructed via a shared `AgentRegistry`, with the Coordinator as the single orchestration layer — not four independent prompt-wrapper functions.
+
+### Shared agent framework (built first — unblocks everyone below)
+
+| Task | Owner | Status | Dependencies | Description |
+|---|---|---|---|---|
+| `BaseAgent` abstract class | Hassan | 🔲 | `services/anthropic.ts` ✅, `types/agent.ts` ✅ | `agents/BaseAgent.ts` — the shared lifecycle (`execute()` → buildPrompt → buildMessages → chat() → postProcess → AgentResponse). Every agent extends this; only `buildMessages()`/`postProcess()` are overridden. |
+| `Skill` interface | Hassan | 🔲 | none | `skills/types.ts` — formal shape (`name`, `description`, `instructions`, `examples?`, `metadata?`). Existing skill files reshaped to conform, content unchanged. |
+| `Tool` interface + wrappers | Hassan | 🔲 | `tools/profile.ts` ✅, `project.ts` ✅, `conversation.ts` ✅ | `tools/types.ts` + additive named exports (`ProfileTool`, `ProjectTool`, `ConversationTool`) grouping the existing, unmodified functions so agents can declare ownership instead of importing functions ad hoc. |
+| `AgentRegistry` | Hassan | 🔲 | BaseAgent, all four concrete agents | `agents/AgentRegistry.ts` — `createAgentRegistry()` constructs all four agents and injects Interview/Decision/Review into Coordinator. Performs no orchestration itself, only construction/wiring. |
+
+Built by Hassan as shared foundation since this session's refactor covers the whole agent layer; Khaled's Decision/Review agents (below) depend on `BaseAgent` and the `Tool`/`Skill` interfaces existing first.
+
+### Per-agent implementation
 
 | Task | Owner | Status | Dependencies | Description |
 |---|---|---|---|---|
 | Scaffold `hooks/` folder | Hassan | 🔲 | Phase 1 | One-time folder creation. Hassan creates `hooks/` (he owns 3 of its 4 files); Khaled adds `useChat.ts` into it independently once created. `middleware/` is created by Khaled directly as part of his own Middleware task — no shared scaffolding needed since it's a single-owner folder. |
-| Coordinator Agent | Hassan | 🔲 | `prompts/coordinator.ts` ✅, `services/anthropic.ts` ✅ | Implement `agents/coordinator.ts`: call Claude with the coordinator prompt, validate against `CoordinatorResponseSchema`, return `{ workflow }`. Shared dependency for both the Twin and Decision pipelines. |
-| Interview Agent | Hassan | 🔲 | Coordinator Agent, `skills/personalInterview.ts` ✅, `skills/projectInterview.ts` ✅ | Implement `agents/interview.ts`: adaptive question loop, detects completeness, returns next question or final profile JSON. |
-| `validateProfileCompleteness()` tool | Hassan | 🔲 | `types/profile.ts` ✅ | New tool (spec-recommended, currently missing). Checks required fields per `personalInterviewSkill`/`projectInterviewSkill` field lists; returns `{ complete, missingFields }`. Used by Interview Agent to decide the next question. |
-| Tool integration — profile/project | Omar | 🔲 | `tools/profile.ts` ✅, `tools/project.ts` ✅ (already built) | Wire existing `savePersonProfile`, `getPersonProfile`, `saveProjectProfile`, `getProjectProfile`, `listTwins`, `listProjects` into the Interview Agent's completion step. Coordinate with Hassan, since the call site lives in `agents/interview.ts`. |
-| `useInterview()` hook | Hassan | 🔲 | Interview Agent | `hooks/useInterview.ts` — drives the interview conversation state for the UI (consumed by Habiba in Phase 4). |
-| `useTwins()` / `useProjects()` hooks | Hassan | 🔲 | Tool integration (Omar) | `hooks/useTwins.ts`, `hooks/useProjects.ts` — list/fetch data for Home and Twin Profile screens. |
-| Decision Agent | Khaled | 🔲 | Coordinator Agent, `skills/decisionReasoning.ts` ✅ | Implement `agents/decision.ts`: load context (via Middleware), call Claude with decision skill, return `{ answer, reasoning, confidence }`. |
-| Review Agent | Khaled | 🔲 | Decision Agent, `skills/answerReview.ts` ✅ | Implement `agents/review.ts`: validate Decision Agent output, apply the 70% confidence threshold, return `{ approved, confidence, requiresHuman }`. |
-| Tool integration — conversation | Omar | 🔲 | `tools/conversation.ts` ✅ (already built) | Wire existing `saveMessage`, `getConversationHistory`, `clearConversationHistory` into the Decision Agent's context loading and post-answer save step. Coordinate with Khaled, since the call site lives in `agents/decision.ts`. |
-| Middleware — context injection | Khaled | 🔲 | Decision Agent, Tool integration (Omar) | `middleware/loadDecisionContext.ts` — the spec's required context-injection layer: auto-loads Personal Profile + Project Profile + last 10–20 messages before the Decision Agent runs, so the agent never fetches data itself. |
-| `useChat()` hook | Khaled | 🔲 | Decision Agent, Review Agent, Middleware | `hooks/useChat.ts` — drives the chat screen's send/receive/agent-status state (consumed by Habiba/Omar in Phase 4). |
-| End-to-end pipeline — Twin/Project creation | Hassan | 🔲 | Coordinator, Interview Agent, Tool integration (Omar) | Verify `Coordinator → Interview Agent → save*Profile → Done` runs correctly for both CREATE_TWIN and CREATE_PROJECT workflows via a console/script test. |
-| End-to-end pipeline — Chat | Khaled | 🔲 | Coordinator, Decision Agent, Review Agent, Middleware | Verify `Coordinator → Decision Agent → Review Agent → Answer` runs correctly via a console/script test, including the low-confidence escalation path. |
+| Coordinator Agent | Hassan | 🔲 | BaseAgent, AgentRegistry, Interview/Decision/Review agents, Middleware | `agents/coordinator.ts` — `CoordinatorAgent extends BaseAgent`. Its LLM call still only classifies intent (`CoordinatorResponseSchema` → `{ workflow }`, prompt/schema unchanged); `postProcess()` is now where orchestration happens — it invokes Interview or (Middleware → Decision → Review) based on the classified workflow, and returns the final pipeline result. This is the single orchestration layer; there is no separate workflow-runner. |
+| Interview Agent | Hassan | 🔲 | BaseAgent, Skill/Tool interfaces, `skills/personalInterview.ts` ✅, `skills/projectInterview.ts` ✅ | `agents/interview.ts` — `InterviewAgent extends BaseAgent`, declares `[ProfileTool, ProjectTool, ValidationTool]`. `postProcess()` validates completeness via `ValidationTool` and saves via `ProfileTool`/`ProjectTool` once genuinely complete. |
+| `validateProfileCompleteness()` tool | Hassan | 🔲 | `types/profile.ts` ✅ | `tools/validateProfileCompleteness.ts`, exposed as `ValidationTool`. Checks required fields per `personalInterviewSkill`/`projectInterviewSkill` metadata; returns `{ complete, missingFields }`. |
+| `useInterview()` hook | Hassan | 🔲 | Interview Agent, AgentRegistry | `hooks/useInterview.ts` — drives the interview conversation state for the UI (consumed by Habiba in Phase 4) by calling `registry.coordinator.execute()`. |
+| `useTwins()` / `useProjects()` hooks | Hassan | 🔲 | Tool wrappers | `hooks/useTwins.ts`, `hooks/useProjects.ts` — list/fetch data for Home and Twin Profile screens, via `ProfileTool.list`/`ProjectTool.list` directly (no LLM reasoning involved, so no Coordinator round-trip for pure reads). |
+| Decision Agent | Khaled | 🔲 | BaseAgent, Skill/Tool interfaces, `skills/decisionReasoning.ts` ✅ | `agents/decision.ts` — `DecisionAgent extends BaseAgent`, declares `[ConversationTool]`. Receives `AgentContext` (personProfile/projectProfile/conversationHistory) from Middleware via the Coordinator — never fetches its own context. |
+| Review Agent | Khaled | 🔲 | Decision Agent, `skills/answerReview.ts` ✅ | `agents/review.ts` — `ReviewAgent extends BaseAgent`, declares no tools. Validates Decision Agent output, applies the 70% confidence threshold, returns `{ approved, confidence, requiresHuman }`. |
+| Middleware — context injection | Khaled | 🔲 | Decision Agent, Tool wrappers | `middleware/loadDecisionContext.ts` — invoked by the Coordinator (not by DecisionAgent itself, and not by a workflow-runner) immediately before `DecisionAgent.execute()`. Assembles Personal Profile + Project Profile + last 10–20 messages via `ProfileTool`/`ProjectTool`/`ConversationTool`. |
+| `useChat()` hook | Khaled | 🔲 | Decision Agent, Review Agent, Middleware, AgentRegistry | `hooks/useChat.ts` — drives the chat screen's send/receive/agent-status state (consumed by Habiba/Omar in Phase 4) by calling `registry.coordinator.execute()`. |
+| End-to-end pipeline — Twin/Project creation | Hassan | 🔲 | Coordinator, Interview Agent, AgentRegistry | Verify `registry.coordinator.execute()` correctly routes to Interview and saves via its tools, for both CREATE_TWIN and CREATE_PROJECT, via a console/script test. |
+| End-to-end pipeline — Chat | Khaled | 🔲 | Coordinator, Decision Agent, Review Agent, Middleware | Verify `registry.coordinator.execute()` correctly runs Middleware → Decision → Review and only saves the answer after approval, via a console/script test, including the low-confidence escalation path. |
 | Agent testing — Coordinator/Interview | Hassan | 🔲 | End-to-end pipeline (Hassan) | Manual test scripts covering all 4 workflow routes + interview completion edge cases. |
 | Agent testing — Decision/Review | Khaled | 🔲 | End-to-end pipeline (Khaled) | Manual test scripts covering high-confidence, low-confidence/escalation, and missing-context cases from the spec's Error States section. |
 

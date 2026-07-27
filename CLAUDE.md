@@ -222,6 +222,8 @@ Agents should NEVER:
 - Manage UI
 - Perform navigation
 
+Every agent is implemented as a class extending the shared `BaseAgent`, constructed only via `createAgentRegistry()` — never instantiated ad hoc. The Coordinator is the single orchestration layer; there is no separate workflow-runner. See `ARCHITECTURE.md` for the full lifecycle, registry, Skill/Tool interfaces, and Middleware contract.
+
 ---
 
 # Skills
