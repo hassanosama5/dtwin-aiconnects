@@ -15,8 +15,12 @@ import {
   KeyboardAvoidingView,
   Platform,
   TouchableOpacity,
-  SafeAreaView,
 } from 'react-native';
+// react-native's own SafeAreaView is deprecated and has known inset-
+// calculation problems under the New Architecture on iOS -- can collapse
+// to zero height, taking flex-1 children down with it, with no crash.
+// Same root cause and fix as app/index.tsx.
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useInterview } from '../../hooks/useInterview';
