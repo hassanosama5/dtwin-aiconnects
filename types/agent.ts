@@ -25,6 +25,12 @@ export interface CoordinatorRequest {
   // Full interview transcript so far, forwarded to the Interview Agent when the
   // Coordinator routes to CREATE_TWIN / CREATE_PROJECT / UPDATE_PROFILE.
   messages?: Array<{ role: 'agent' | 'user'; content: string }>;
+  // Set once a caller already knows it's continuing an active interview
+  // (e.g. useInterview on turn 2+). The Coordinator's own classification
+  // still runs every turn, but this hint wins over it in postProcess() --
+  // a free-text interview answer is not reliably classifiable in isolation,
+  // even given the full transcript (see DECISIONS.md #007).
+  activeWorkflow?: 'CREATE_TWIN' | 'CREATE_PROJECT';
   context?: {
     twinId?: string;
     projectId?: string;

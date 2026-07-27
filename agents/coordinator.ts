@@ -55,6 +55,17 @@ export class CoordinatorAgent extends BaseAgent<
   }
 
   protected buildMessages(request: CoordinatorRequest): ClaudeMessage[] {
+    // Bug fix: classifying only the latest message loses all context past
+    // turn 1 — a free-text interview answer like "I value security and
+    // honesty" has no signal telling the classifier "we're already
+    // mid-interview." When a transcript exists, classify against the whole
+    // thing so the model can see it's a continuation, not a fresh request.
+    if (request.messages && request.messages.length > 0) {
+      return request.messages.map((message) => ({
+        role: message.role === 'agent' ? 'assistant' : 'user',
+        content: message.content,
+      }));
+    }
     return [{ role: 'user', content: request.message }];
   }
 
@@ -62,7 +73,9 @@ export class CoordinatorAgent extends BaseAgent<
     parsed: CoordinatorResponse,
     request: CoordinatorRequest
   ): Promise<CoordinatorResult> {
-    const { workflow } = parsed;
+    // request.activeWorkflow (when present) wins over the LLM's own
+    // classification -- see the field's doc comment in types/agent.ts.
+    const workflow = request.activeWorkflow ?? parsed.workflow;
 
     if (workflow === 'CHAT') {
       return this.runChat(request);

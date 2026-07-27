@@ -57,3 +57,13 @@ The Coordinator owns `ConversationTool`, deviating from `PROJECT_SPEC.md`'s orig
 Reason
 
 That line held when the Coordinator only classified intent. Now that it also orchestrates the CHAT pipeline end-to-end and decides whether Review runs, something has to record the user's question and the final approved answer (or escalation notice) — and only the Coordinator sees the whole picture (workflow + review outcome) needed to do that correctly. Decision and Review agents declare no tools; all their context arrives via `AgentContext` from Middleware rather than being fetched by any agent itself.
+
+---
+
+# Decision 007
+
+`CoordinatorRequest.activeWorkflow` lets a caller override the Coordinator's own intent classification.
+
+Reason
+
+Critical bug, live-tested and confirmed: classifying a free-text interview answer (e.g. "Security first, always.") in isolation is unreliable — it was misclassified as `CHAT` even when given the full conversation transcript as context. A caller that already knows it's continuing an active interview (e.g. `useInterview` on turn 2+) now passes `activeWorkflow`, which `CoordinatorAgent.postProcess()` prefers over the LLM's classification. The classify call still runs every turn — this is a `postProcess()`-only change, not an `execute()` override, so `BaseAgent`'s lifecycle and error handling stay untouched. Falls under the "unless a critical bug is discovered" exception to treating the architecture layer as stable.
