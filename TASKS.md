@@ -1,7 +1,7 @@
 # Foundation
 
 - [x] Expo Setup
-- [x] Supabase (schema written; live project not yet provisioned — see ROADMAP Blockers)
+- [x] Supabase (`.env` populated; `twins` table confirmed live and queryable — `projects`/`messages` not yet checked, see ROADMAP Blockers)
 - [x] Navigation (shell only — screens are placeholders)
 - [x] Theme
 - [x] Folder Structure
@@ -20,7 +20,7 @@
 - [x] Decision
 - [x] Review
 
-(All four implemented and type-checked; not yet run against a live Claude/Supabase call — no `.env` yet.)
+(All four implemented and type-checked. Live-tested against real Claude/Supabase: CREATE_TWIN kickoff + a follow-up turn, and the CHAT missing-context guard. Not yet live-tested: full interview completion/save, CREATE_PROJECT, live Decision→Review.)
 
 # Skills
 

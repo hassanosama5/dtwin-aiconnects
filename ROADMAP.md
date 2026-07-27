@@ -191,10 +191,10 @@ Built by Hassan as shared foundation since this session's refactor covers the wh
 | Review Agent | Khaled | ✅ | Decision Agent, `skills/answerReview.ts` ✅ | `agents/review.ts` — `ReviewAgent extends BaseAgent`, declares no tools. Validates Decision Agent output, applies the 70% confidence threshold, returns `{ approved, confidence, requiresHuman }`. Implemented by Hassan in the same architecture-refactor pass as Decision Agent — flagged for Khaled's review. |
 | Middleware — context injection | Khaled | ✅ | Decision Agent, Tool wrappers | `middleware/loadDecisionContext.ts` — invoked by the Coordinator (not by DecisionAgent itself, and not by a workflow-runner) immediately before `DecisionAgent.execute()`. Assembles Personal Profile + Project Profile + last 10–20 messages via `ProfileTool`/`ProjectTool`/`ConversationTool`. Implemented by Hassan alongside Coordinator, since Coordinator is the only caller — flagged for Khaled's review. |
 | `useChat()` hook | Khaled | 🔲 | Decision Agent, Review Agent, Middleware, AgentRegistry | `hooks/useChat.ts` — drives the chat screen's send/receive/agent-status state (consumed by Habiba/Omar in Phase 4) by calling `registry.coordinator.execute()`. Not yet started — still Khaled's to build. |
-| End-to-end pipeline — Twin/Project creation | Hassan | 🔲 | Coordinator, Interview Agent, AgentRegistry | Code path implemented and type-checks; runtime verification via console/script test is blocked on `.env`/Supabase provisioning (Omar, Phase 3). |
-| End-to-end pipeline — Chat | Khaled | 🔲 | Coordinator, Decision Agent, Review Agent, Middleware | Code path implemented and type-checks; runtime verification via console/script test is blocked on `.env`/Supabase provisioning (Omar, Phase 3). |
-| Agent testing — Coordinator/Interview | Hassan | 🔲 | End-to-end pipeline (Hassan) | Manual test scripts covering all 4 workflow routes + interview completion edge cases. Blocked on the same `.env`/Supabase provisioning. |
-| Agent testing — Decision/Review | Khaled | 🔲 | End-to-end pipeline (Khaled) | Manual test scripts covering high-confidence, low-confidence/escalation, and missing-context cases from the spec's Error States section. Blocked on the same `.env`/Supabase provisioning. |
+| End-to-end pipeline — Twin/Project creation | Hassan | 🟡 | Coordinator, Interview Agent, AgentRegistry | Live-verified against real Claude (`.env` now populated): CREATE_TWIN kickoff and a follow-up turn using conversation history both return correctly-shaped, schema-valid JSON, with the Coordinator correctly routing to Interview. Not yet verified: CREATE_PROJECT routing, a full interview reaching `complete: true`, and the ProfileTool/ProjectTool save step (needs 6-8 real turns to reach naturally — not run to conserve API calls). |
+| End-to-end pipeline — Chat | Khaled | 🟡 | Coordinator, Decision Agent, Review Agent, Middleware | Live-verified: Coordinator correctly classifies CHAT and its missing-twinId/projectId guard throws and is caught by BaseAgent's error handling as designed. Not yet verified: the actual Decision → Review path, since that needs a real twinId/projectId from a completed, saved twin/project (none exist yet). |
+| Agent testing — Coordinator/Interview | Hassan | 🟡 | End-to-end pipeline (Hassan) | Basic live coverage above. Still needed: full interview-to-completion run, CREATE_PROJECT, and contradiction-detection edge cases. |
+| Agent testing — Decision/Review | Khaled | 🔲 | End-to-end pipeline (Khaled) | Manual test scripts covering high-confidence, low-confidence/escalation, and missing-context cases from the spec's Error States section. Needs a real twin+project to exist first (see row above). |
 
 **Phase 2 exit criteria:** both pipelines can be triggered from a script/console call (no UI) and return correctly-shaped, schema-valid JSON.
 
@@ -283,24 +283,24 @@ Whenever a feature is completed:
 
 **Phase 1 (Foundation) is complete.** **Phase 2's agent layer is now implemented and type-checked**, following the architecture refactor recorded in `ARCHITECTURE.md` and `DECISIONS.md` #004–#006: `BaseAgent`, the `Skill`/`Tool` interfaces, `AgentRegistry`, `middleware/loadDecisionContext.ts`, and all four agents (`CoordinatorAgent`, `InterviewAgent`, `DecisionAgent`, `ReviewAgent`) exist as real classes with the Coordinator as the single orchestration layer — not four prompt-wrapper stubs. This was built by Hassan in one pass across five commits (docs → Skill/Tool interfaces → BaseAgent + leaf agents → Middleware → Coordinator + Registry) because the refactor is cross-cutting by nature: Coordinator needs concrete Decision/Review classes to hold references to, so it couldn't be split mid-flight along the original per-developer ownership lines. This touches `agents/decision.ts`, `agents/review.ts`, and `middleware/loadDecisionContext.ts` — nominally Khaled's files — flagged above for his review; his branch had no prior work on them (checked before starting) so nothing was overwritten.
 
-**Not yet done:** none of this has been run against a live Claude/Supabase call — there's still no `.env`. `hooks/useInterview.ts`/`useTwins.ts`/`useProjects.ts` (Hassan) and `hooks/useChat.ts` (Khaled) haven't been started. Habiba/Omar's Phase 3/4 work is unaffected and can still proceed in parallel.
+**Update:** `.env` has since been populated with real credentials and the pipeline has been live-tested (see Phase 2 rows above and `DECISIONS.md`-adjacent note in `prompts/interview.ts`'s commit) — CREATE_TWIN's Coordinator → Interview routing works end-to-end against real Claude, including using conversation history correctly on a follow-up turn, and the CHAT path's missing-context guard fires correctly. One real bug was found and fixed live: `prompts/interview.ts` didn't specify the required JSON shape for incomplete turns, so Claude sometimes omitted `complete` entirely and failed schema validation — fixed by spelling out both shapes explicitly in the prompt.
+
+**Still not done:** a full interview run to `complete: true` (to exercise `ValidationTool` + the `ProfileTool`/`ProjectTool` save step), CREATE_PROJECT, and the live Decision → Review path (needs a real saved twin/project first). `hooks/useInterview.ts`/`useTwins.ts`/`useProjects.ts` (Hassan) and `hooks/useChat.ts` (Khaled) haven't been started. Habiba/Omar's Phase 3/4 work is unaffected and can still proceed in parallel.
 
 ## Next Priority
 
-1. **Unblock testing** — Omar provisions a real Supabase project, applies the migration, and populates `.env`. This is the single biggest blocker and affects all four developers.
-2. **In parallel:**
-   - Hassan implements the Coordinator + Interview Agents.
-   - Khaled implements the Decision + Review Agents.
-   - Habiba can start on static screen shells (Home, Twin Profile, Project, Chat UI) using placeholder data, ahead of Phase 4, since visual layout doesn't depend on the agents being wired yet.
-   - Omar provisions Supabase (above) and prepares the tool-integration work that both Hassan and Khaled will need next.
+1. Hassan: run a full interview to completion to verify the save path, then start `hooks/useInterview.ts`/`useTwins.ts`/`useProjects.ts`.
+2. Khaled: build Decision + Review confidence in the same way once a real twin/project exists to test against; start `hooks/useChat.ts`.
+3. Omar: confirm `projects` and `messages` tables exist (only `twins` has been verified live) and continue Phase 3 persistence work.
+4. Habiba: static screen shells (Home, Twin Profile, Project, Chat UI) using placeholder data can proceed now, independent of the above.
 
 ## Blockers
 
-- **No `.env` configured** — no Anthropic API key, no Supabase project. Nothing beyond static UI can be tested until Omar completes provisioning.
-- **Database migration not yet applied** — `001_initial_schema.sql` is written but has never been run against a live database (Omar).
+- ~~No `.env` configured~~ — **Resolved.** `.env` now has real `EXPO_PUBLIC_ANTHROPIC_API_KEY`/`EXPO_PUBLIC_SUPABASE_URL`/`EXPO_PUBLIC_SUPABASE_ANON_KEY` values (verified by live-testing the agent pipeline, see Phase 2 rows above).
+- **Database migration status is partially confirmed, not fully.** Live testing confirmed the `twins` table exists and is queryable (`ProfileTool.list()` returned `{ success: true, twins: [] }` against the real Supabase project). `projects` and `messages` tables have not been checked yet — Omar should confirm the full `001_initial_schema.sql` migration ran, not just `twins`.
 - **No dedicated Project screen** — spec requires Home → Twin → Project → Chat, but no `app/project/[id].tsx` route exists yet. Needs to be created by Habiba in Phase 3/4 before her routing work can complete.
 - **Shared file coordination** — `app/_layout.tsx` will be edited by Habiba for all new route registrations; since she now owns this file exclusively, cross-developer conflicts on it should be rare, but she should still land route additions in small, frequent PRs rather than one large one.
-- **`hooks/` and `middleware/` folders don't exist yet** — Hassan scaffolds `hooks/` before his first hook task; Khaled creates `middleware/` directly when starting his Middleware task. No shared scaffolding conflict expected since each folder now has a clear single first-creator.
+- **`hooks/` still doesn't exist** — `middleware/` was created as part of this session's Coordinator/Middleware work (`middleware/loadDecisionContext.ts`). `hooks/` is next: Hassan scaffolds it before his first hook task (`useInterview`/`useTwins`/`useProjects`); Khaled adds `useChat.ts` independently once it exists.
 
 ## Future Improvements
 
