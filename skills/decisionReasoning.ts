@@ -2,10 +2,11 @@
  * Decision Reasoning Skill
  *
  * Guides the Decision Agent to answer as the represented person.
- * Phase 2 implementation placeholder.
  */
 
-export const decisionReasoningSkill = {
+import { Skill } from './types';
+
+export const decisionReasoningSkill: Skill = {
   name: 'Decision Reasoning',
   description: 'Answer questions as the represented person would',
 
@@ -39,4 +40,4 @@ Output format:
   "confidence": 85
 }
   `.trim(),
-} as const;
+};

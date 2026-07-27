@@ -2,28 +2,13 @@
  * Project Interview Skill
  *
  * Guides the Interview Agent to build a ProjectProfile.
- * Phase 2 implementation placeholder.
  */
 
-export const projectInterviewSkill = {
+import { Skill } from './types';
+
+export const projectInterviewSkill: Skill = {
   name: 'Project Interview',
   description: 'Understands one specific project context',
-
-  requiredFields: [
-    'name',
-    'goal',
-    'priorities',
-    'constraints',
-    'decisionRules',
-    'escalationRules',
-  ],
-
-  optionalFields: [
-    'description',
-    'timeline',
-    'tradeoffs',
-    'currentChallenges',
-  ],
 
   instructions: `
 You are conducting a project interview to understand project-specific context.
@@ -40,4 +25,21 @@ Continue until all required fields have enough information.
 
 Minimum 5 questions, maximum 8 questions.
   `.trim(),
-} as const;
+
+  metadata: {
+    requiredFields: [
+      'name',
+      'goal',
+      'priorities',
+      'constraints',
+      'decisionRules',
+      'escalationRules',
+    ],
+    optionalFields: [
+      'description',
+      'timeline',
+      'tradeoffs',
+      'currentChallenges',
+    ],
+  },
+};

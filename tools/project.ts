@@ -2,13 +2,13 @@
  * Project Tools
  *
  * Tools for managing project profiles.
- * Phase 2 implementation placeholder.
  */
 
 import { supabase } from '../services/supabase';
 import { ProjectProfile } from '../types/profile';
 import { Project, ProjectInsert } from '../types/database';
 import { logger } from '../utils/logger';
+import { Tool } from './types';
 
 /**
  * Save a project profile
@@ -104,3 +104,22 @@ export async function listProjects(
     };
   }
 }
+
+/**
+ * ProjectTool
+ *
+ * Groups the project functions above under one named tool so agents can
+ * declare ownership (e.g. `tools: [ProjectTool]`) instead of importing
+ * these functions ad hoc.
+ */
+export const ProjectTool: Tool & {
+  save: typeof saveProjectProfile;
+  get: typeof getProjectProfile;
+  list: typeof listProjects;
+} = {
+  name: 'ProjectTool',
+  description: 'Save, load, and list project profiles for a Decision Twin.',
+  save: saveProjectProfile,
+  get: getProjectProfile,
+  list: listProjects,
+};

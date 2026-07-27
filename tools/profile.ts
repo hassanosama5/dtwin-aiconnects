@@ -2,13 +2,13 @@
  * Profile Tools
  *
  * Tools for managing person profiles.
- * Phase 2 implementation placeholder.
  */
 
 import { supabase } from '../services/supabase';
 import { PersonProfile } from '../types/profile';
 import { Twin, TwinInsert } from '../types/database';
 import { logger } from '../utils/logger';
+import { Tool } from './types';
 
 /**
  * Save a person profile
@@ -103,3 +103,22 @@ export async function listTwins(): Promise<
     };
   }
 }
+
+/**
+ * ProfileTool
+ *
+ * Groups the profile functions above under one named tool so agents can
+ * declare ownership (e.g. `tools: [ProfileTool]`) instead of importing
+ * these functions ad hoc.
+ */
+export const ProfileTool: Tool & {
+  save: typeof savePersonProfile;
+  get: typeof getPersonProfile;
+  list: typeof listTwins;
+} = {
+  name: 'ProfileTool',
+  description: 'Save, load, and list Decision Twin personal profiles.',
+  save: savePersonProfile,
+  get: getPersonProfile,
+  list: listTwins,
+};

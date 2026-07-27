@@ -2,14 +2,13 @@
  * Answer Review Skill
  *
  * Guides the Review Agent to validate decisions.
- * Phase 2 implementation placeholder.
  */
 
-export const answerReviewSkill = {
+import { Skill } from './types';
+
+export const answerReviewSkill: Skill = {
   name: 'Answer Review',
   description: 'Validate decision agent responses',
-
-  confidenceThreshold: 70, // Below this = requires human
 
   instructions: `
 You are reviewing a decision made by a Decision Twin.
@@ -45,4 +44,8 @@ or
   "reason": "Insufficient project-specific information"
 }
   `.trim(),
-} as const;
+
+  metadata: {
+    confidenceThreshold: 70, // Below this = requires human
+  },
+};

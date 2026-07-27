@@ -22,14 +22,33 @@ export interface AgentResponse<T = unknown> {
 // Coordinator Agent
 export interface CoordinatorRequest {
   message: string;
+  // Full interview transcript so far, forwarded to the Interview Agent when the
+  // Coordinator routes to CREATE_TWIN / CREATE_PROJECT / UPDATE_PROFILE.
+  messages?: Array<{ role: 'agent' | 'user'; content: string }>;
   context?: {
     twinId?: string;
     projectId?: string;
   };
 }
 
+// Raw classification output validated against the Coordinator's own LLM call.
 export interface CoordinatorResponse {
   workflow: WorkflowType;
+}
+
+// Final result returned by CoordinatorAgent.execute() after it orchestrates the
+// agent(s) selected by the classified workflow. Richer than CoordinatorResponse
+// because the LLM only classifies — the Coordinator's postProcess() does the rest.
+export type CoordinatorResult =
+  | { workflow: 'CREATE_TWIN' | 'CREATE_PROJECT' | 'UPDATE_PROFILE'; interview: InterviewResponse }
+  | { workflow: 'CHAT'; decision: DecisionResponse; review: ReviewResponse };
+
+// Context assembled by Middleware before an agent that needs it executes.
+// Agents read from this; they never fetch it themselves.
+export interface AgentContext {
+  personProfile?: PersonProfile;
+  projectProfile?: ProjectProfile;
+  conversationHistory?: ChatMessage[];
 }
 
 // Interview Agent
