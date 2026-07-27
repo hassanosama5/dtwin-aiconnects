@@ -12,10 +12,14 @@ import {
   Text,
   TextInput,
   ScrollView,
-  SafeAreaView,
   ActivityIndicator,
   TouchableOpacity,
 } from 'react-native';
+// react-native's own SafeAreaView is deprecated and has known inset-
+// calculation problems under the New Architecture on iOS -- can collapse
+// to zero height, taking flex-1 children down with it, with no crash.
+// react-native-safe-area-context is already a project dependency.
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
