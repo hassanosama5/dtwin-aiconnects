@@ -52,6 +52,11 @@ export interface DecisionRequest {
   twinId: string;
   projectId: string;
   conversationHistory: ChatMessage[];
+  context?: {
+    personProfile?: PersonProfile;
+    projectProfile?: ProjectProfile;
+    contextSummary?: string;
+  };
 }
 
 export interface DecisionResponse {

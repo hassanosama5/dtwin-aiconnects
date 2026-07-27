@@ -11,10 +11,12 @@ import { env } from '../config/env';
 import { logger } from '../utils/logger';
 import { validateAgentResponse } from '../utils/validation';
 
-// Initialize Anthropic client
-const anthropic = new Anthropic({
-  apiKey: env.anthropic.apiKey,
-});
+// Initialize Anthropic client only when a real key is available
+const anthropic = env.anthropic.apiKey
+  ? new Anthropic({
+      apiKey: env.anthropic.apiKey,
+    })
+  : null;
 
 // Message type
 export interface ClaudeMessage {
@@ -63,6 +65,10 @@ export async function chat<T = unknown>(
   const endTimer = logger.time('Claude API call');
 
   try {
+    if (!anthropic) {
+      throw new Error('Anthropic API key is not configured. Set EXPO_PUBLIC_ANTHROPIC_API_KEY to enable live responses.');
+    }
+
     // Add JSON instruction if schema is provided
     const enhancedMessages = schema
       ? [
@@ -186,6 +192,10 @@ export async function* chatStream(
   } = config;
 
   try {
+    if (!anthropic) {
+      throw new Error('Anthropic API key is not configured. Set EXPO_PUBLIC_ANTHROPIC_API_KEY to enable streaming.');
+    }
+
     const stream = await anthropic.messages.create({
       model: env.anthropic.model,
       max_tokens: maxTokens,

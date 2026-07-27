@@ -27,7 +27,8 @@ Confidence evaluation:
 - 50-69: Moderate inference, some uncertainty
 - Below 50: Insufficient information
 
-If confidence < 70: requiresHuman = true
+If confidence < 70: requiresHuman = true.
+If the answer conflicts with the profiles, reject it.
 
 Output format:
 {

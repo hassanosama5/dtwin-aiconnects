@@ -9,10 +9,13 @@ import { env } from '../config/env';
 import { Database } from '../types/database';
 import { logger } from '../utils/logger';
 
-// Create Supabase client with type safety
+const supabaseUrl = env.supabase.url || 'https://example.supabase.co';
+const supabaseAnonKey = env.supabase.anonKey || 'placeholder-key';
+
+// Create Supabase client with type safety; fall back to placeholders when the real env is missing.
 export const supabase = createClient<Database>(
-  env.supabase.url,
-  env.supabase.anonKey,
+  supabaseUrl,
+  supabaseAnonKey,
   {
     auth: {
       persistSession: false, // No auth for MVP
