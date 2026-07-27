@@ -20,5 +20,15 @@ Never assume missing information.
 
 Continue interviewing until the profile is complete.
 
-When complete, generate structured JSON with the profile data.
+Respond with exactly this JSON shape on EVERY turn — "complete" is always required:
+{
+  "complete": false,
+  "nextQuestion": "your next question, when complete is false"
+}
+or, once every required field has enough information:
+{
+  "complete": true,
+  "profile": { ...the completed profile fields... }
+}
+Never omit "complete". Never return free-form text outside this JSON shape.
 ` as const;
