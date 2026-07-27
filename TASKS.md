@@ -40,12 +40,22 @@
 
 - [x] Decision context injection (loadDecisionContext)
 
+# Hooks
+
+- [x] useInterview (live-tested to full completion + save)
+- [x] useTwins
+- [ ] useProjects
+- [ ] useChat
+
 # UI
 
-- [ ] Home
-- [ ] Twin
+- [x] Home (real twin list, search, empty state, FAB)
+- [x] Create Twin (conversational interview screen)
+- [ ] Twin Profile
 - [ ] Project
 - [ ] Chat
+
+(Home/Create Twin not visually verified — no emulator/simulator/device available in this environment. Compilation, bundling, and the full data path were verified instead.)
 
 # Polish
 
