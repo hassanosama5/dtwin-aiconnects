@@ -125,10 +125,12 @@ Concrete tools (`ProfileTool`, `ProjectTool`, `ConversationTool`, `ValidationToo
 
 | Agent | Declared Tools |
 |---|---|
-| Coordinator | none |
+| Coordinator | ConversationTool (see note below) |
 | Interview | ProfileTool, ProjectTool, ValidationTool |
-| Decision | ConversationTool |
+| Decision | none — all context arrives via Middleware |
 | Review | none |
+
+**Deviation from `PROJECT_SPEC.md`, disclosed:** the spec originally lists the Coordinator's tools as "None," which held when it only classified intent. Now that it also orchestrates the CHAT pipeline end-to-end (per the approved single-orchestration-layer design), it owns `ConversationTool` to record the user's question and the final approved answer or escalation notice — nothing else touches conversation persistence for chat. Recorded in `DECISIONS.md`.
 
 ---
 

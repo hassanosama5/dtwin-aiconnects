@@ -13,12 +13,13 @@ import { ReviewResponseSchema } from '../utils/validation';
 import { AgentContext, ReviewRequest, ReviewResponse } from '../types/agent';
 
 export class ReviewAgent extends BaseAgent<ReviewRequest, ReviewResponse> {
-  constructor() {
+  constructor(model?: string) {
     super({
       name: 'Review',
       description: "Validates the Decision Agent's response before it reaches the user.",
       responsibility:
         'Verify the answer is supported by the provided profiles, evaluate confidence, and decide whether to escalate to the represented person. Never modify the answer — only approve or reject it.',
+      model,
       systemPrompt: reviewPrompt,
       skills: [answerReviewSkill],
       tools: [],

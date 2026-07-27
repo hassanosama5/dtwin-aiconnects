@@ -21,12 +21,13 @@ import { InterviewRequest, InterviewResponse } from '../types/agent';
 import { PersonProfile, ProjectProfile } from '../types/profile';
 
 export class InterviewAgent extends BaseAgent<InterviewRequest, InterviewResponse> {
-  constructor() {
+  constructor(model?: string) {
     super({
       name: 'Interview',
       description: 'Conducts adaptive interviews to build Personal and Project profiles.',
       responsibility:
         'Ask questions until a profile is complete. Never invent information. Never assume missing information.',
+      model,
       systemPrompt: interviewPrompt,
       skills: [personalInterviewSkill, projectInterviewSkill],
       tools: [ProfileTool, ProjectTool, ValidationTool],

@@ -15,12 +15,13 @@ import { DecisionResponseSchema } from '../utils/validation';
 import { AgentContext, DecisionRequest, DecisionResponse } from '../types/agent';
 
 export class DecisionAgent extends BaseAgent<DecisionRequest, DecisionResponse> {
-  constructor() {
+  constructor(model?: string) {
     super({
       name: 'Decision',
       description: "Answers questions as the represented person's Decision Twin.",
       responsibility:
         'Reason only from the Personal Profile, Project Profile, and Conversation History provided in context. Never invent missing preferences.',
+      model,
       systemPrompt: decisionPrompt,
       skills: [decisionReasoningSkill],
       tools: [],

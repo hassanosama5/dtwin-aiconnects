@@ -1,32 +1,44 @@
 # Foundation
 
-- [ ] Expo Setup
-- [ ] Supabase
-- [ ] Navigation
-- [ ] Theme
-- [ ] Folder Structure
+- [x] Expo Setup
+- [x] Supabase (schema written; live project not yet provisioned — see ROADMAP Blockers)
+- [x] Navigation (shell only — screens are placeholders)
+- [x] Theme
+- [x] Folder Structure
+
+# Agent Framework
+
+- [x] BaseAgent abstract class
+- [x] Skill interface
+- [x] Tool interface
+- [x] AgentRegistry
 
 # Agents
 
-- [ ] Coordinator
-- [ ] Interview
-- [ ] Decision
-- [ ] Review
+- [x] Coordinator (orchestrates Interview / Decision+Review — single orchestration layer)
+- [x] Interview
+- [x] Decision
+- [x] Review
+
+(All four implemented and type-checked; not yet run against a live Claude/Supabase call — no `.env` yet.)
 
 # Skills
 
-- [ ] Personal Interview
-- [ ] Project Interview
-- [ ] Decision Reasoning
-- [ ] Answer Review
+- [x] Personal Interview
+- [x] Project Interview
+- [x] Decision Reasoning
+- [x] Answer Review
 
 # Tools
 
-- [ ] Save Profile
-- [ ] Get Profile
-- [ ] Save Project
-- [ ] Get Project
-- [ ] Chat History
+- [x] Save Profile / Get Profile / List Twins (ProfileTool)
+- [x] Save Project / Get Project / List Projects (ProjectTool)
+- [x] Save Message / Get Chat History (ConversationTool)
+- [x] Validate Profile Completeness (ValidationTool)
+
+# Middleware
+
+- [x] Decision context injection (loadDecisionContext)
 
 # UI
 
