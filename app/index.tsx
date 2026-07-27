@@ -2,15 +2,47 @@
  * Home Screen
  *
  * Displays all Decision Twins.
- * Phase 1: Placeholder implementation.
+ * Sprint 2: static UI, mock data — wiring to useTwins() happens in Phase 3.
  */
 
 import React from 'react';
-import { View, Text, ScrollView } from 'react-native';
+import { View, Text, ScrollView, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
+import { Avatar } from '../components/ui/Avatar';
+
+interface MockTwin {
+  id: string;
+  name: string;
+  role: string;
+  projectCount: number;
+}
+
+// Placeholder data — replace with useTwins() in Phase 3.
+const MOCK_TWINS: MockTwin[] = [
+  { id: 'hassan-osama', name: 'Hassan Osama', role: 'Project Manager', projectCount: 3 },
+  { id: 'khaled-ashraf', name: 'Khaled Ashraf', role: 'Team Lead', projectCount: 2 },
+  { id: 'mona-youssef', name: 'Mona Youssef', role: 'Product Owner', projectCount: 4 },
+];
+
+function TwinCard({ twin, onPress }: { twin: MockTwin; onPress: () => void }) {
+  return (
+    <Pressable onPress={onPress}>
+      <Card className="mb-3 flex-row items-center">
+        <Avatar name={twin.name} size="md" />
+        <View className="flex-1 ml-3">
+          <Text className="text-base font-semibold text-gray-900">{twin.name}</Text>
+          <Text className="text-sm text-gray-600">{twin.role}</Text>
+        </View>
+        <Text className="text-sm text-gray-500">
+          {twin.projectCount} {twin.projectCount === 1 ? 'Project' : 'Projects'}
+        </Text>
+      </Card>
+    </Pressable>
+  );
+}
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -29,15 +61,16 @@ export default function HomeScreen() {
             </Text>
           </View>
 
-          {/* Placeholder Content */}
-          <Card className="mb-4">
-            <Text className="text-gray-600 text-center py-8">
-              No Decision Twins yet.
-            </Text>
-            <Text className="text-gray-500 text-center text-sm mb-6">
-              Create your first Twin to get started.
-            </Text>
-          </Card>
+          {/* Twin List */}
+          <View className="mb-4">
+            {MOCK_TWINS.map((twin) => (
+              <TwinCard
+                key={twin.id}
+                twin={twin}
+                onPress={() => router.push(`/twin/${twin.id}`)}
+              />
+            ))}
+          </View>
 
           {/* Actions */}
           <Button
@@ -48,31 +81,6 @@ export default function HomeScreen() {
             }}
             fullWidth
           />
-
-          {/* Info Card */}
-          <Card variant="flat" className="mt-6">
-            <Text className="text-sm font-semibold text-gray-900 mb-2">
-              Phase 1: Foundation Complete ✅
-            </Text>
-            <Text className="text-sm text-gray-600">
-              • Expo + TypeScript configured{'\n'}
-              • Supabase client ready{'\n'}
-              • Anthropic service ready{'\n'}
-              • Type system established{'\n'}
-              • UI components built{'\n'}
-              • Architecture in place
-            </Text>
-          </Card>
-
-          {/* Temporary: manual verification only, remove once Home -> Twin -> Project routing exists */}
-          <View className="mt-4">
-            <Button
-              title="Open Project Screen (Testing)"
-              variant="secondary"
-              onPress={() => router.push('/project/demo')}
-              fullWidth
-            />
-          </View>
         </View>
       </ScrollView>
     </SafeAreaView>
