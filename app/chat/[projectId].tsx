@@ -6,7 +6,10 @@
  */
 
 import React from 'react';
-import { View, Text, SafeAreaView } from 'react-native';
+import { View, Text } from 'react-native';
+// See app/index.tsx -- react-native's own SafeAreaView is deprecated and
+// collapses to zero height under the New Architecture on iOS.
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function ChatScreen() {
   return (
