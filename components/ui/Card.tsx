@@ -11,19 +11,22 @@ interface CardProps extends ViewProps {
   children: React.ReactNode;
   variant?: 'default' | 'bordered' | 'flat';
   padding?: 'none' | 'sm' | 'md' | 'lg';
+  /** Set false to drop the 'default' variant's shadow, e.g. while pressed. */
+  elevated?: boolean;
 }
 
 export function Card({
   children,
   variant = 'default',
   padding = 'md',
+  elevated = true,
   className = '',
   ...props
 }: CardProps) {
   const getVariantStyles = () => {
     switch (variant) {
       case 'default':
-        return 'bg-white border border-gray-200 shadow-sm';
+        return `bg-white border border-gray-200 ${elevated ? 'shadow-sm' : ''}`;
       case 'bordered':
         return 'bg-white border border-gray-300';
       case 'flat':

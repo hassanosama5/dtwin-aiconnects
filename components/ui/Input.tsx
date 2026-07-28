@@ -19,6 +19,7 @@ export function Input({
   error,
   fullWidth = true,
   className = '',
+  style,
   ...props
 }: InputProps) {
   return (
@@ -38,9 +39,11 @@ export function Input({
           px-4
           py-3
           text-base
-          text-gray-900
           ${className}
         `}
+        // Explicit color, not just the `text-gray-900` className — the typed
+        // text wasn't rendering visibly with color set via className alone.
+        style={[{ color: theme.colors.textPrimary }, style]}
         placeholderTextColor={theme.colors.gray[400]}
         {...props}
       />

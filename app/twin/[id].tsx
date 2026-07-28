@@ -6,15 +6,24 @@
  *
  * Static UI only, placeholder data. Wiring to useTwins()/useTwin(id)
  * happens in Phase 3 (see ROADMAP.md).
+ * Sprint 6: loading/empty/error states.
+ * Sprint 7.1: header is now pinned above the scrolling content; unknown
+ * ids fall back to the shared mockDirectory so newly-created twins (from
+ * Create Twin) resolve to a real profile instead of "Twin not found."
  */
 
-import React from 'react';
-import { View, Text, ScrollView, Pressable } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { View, Text, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
+import { PressableScale } from '../../components/ui/PressableScale';
+import { LoadingState } from '../../components/ui/LoadingState';
+import { EmptyState } from '../../components/ui/EmptyState';
+import { ErrorState } from '../../components/ui/ErrorState';
 import { ProfileSectionCard, BulletList } from '../../components/cards/ProfileSectionCard';
+import { getCreatedTwin } from '../../utils/mockDirectory';
 
 interface MockProject {
   id: string;
@@ -94,36 +103,86 @@ const MOCK_TWIN_PROFILES: Record<string, MockTwinProfile> = {
   },
 };
 
-const DEFAULT_TWIN_ID = 'hassan-osama';
+const LOAD_DELAY_MS = 500;
+
+// DEV ONLY — flip to true to preview the error state without a real backend.
+// Remove once useTwins()/useTwin(id) lands and this is driven by a real request.
+const SIMULATE_ERROR = false;
+
+type ViewStatus = 'loading' | 'success' | 'empty' | 'error';
 
 function ProjectCard({ project, onPress }: { project: MockProject; onPress: () => void }) {
+  const [pressed, setPressed] = useState(false);
+
   return (
-    <Pressable onPress={onPress}>
-      <Card className="mb-3">
+    <PressableScale onPress={onPress} onPressedChange={setPressed}>
+      <Card className="mb-3" elevated={!pressed}>
         <Text className="text-base font-semibold text-gray-900">{project.name}</Text>
         <Text className="text-sm text-gray-600 mt-0.5">{project.subtitle}</Text>
       </Card>
-    </Pressable>
+    </PressableScale>
   );
+}
+
+function resolveTwin(id: string | undefined): MockTwinProfile | undefined {
+  if (!id) return undefined;
+  return MOCK_TWIN_PROFILES[id] ?? getCreatedTwin(id);
 }
 
 export default function TwinProfileScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const [status, setStatus] = useState<ViewStatus>('loading');
 
   // TODO: Phase 3 — replace with useTwins()/useTwin(id) once the hook exists.
-  const twin = MOCK_TWIN_PROFILES[id ?? ''] ?? MOCK_TWIN_PROFILES[DEFAULT_TWIN_ID];
+  const twin = resolveTwin(id);
+
+  const load = useCallback(() => {
+    setStatus('loading');
+    const timeout = setTimeout(() => {
+      if (SIMULATE_ERROR) setStatus('error');
+      else if (!twin) setStatus('empty');
+      else setStatus('success');
+    }, LOAD_DELAY_MS);
+    return () => clearTimeout(timeout);
+  }, [twin]);
+
+  useEffect(() => load(), [load]);
+
+  if (status === 'loading') {
+    return (
+      <SafeAreaView className="flex-1 bg-white">
+        <LoadingState message="Loading Twin..." />
+      </SafeAreaView>
+    );
+  }
+
+  if (status === 'error') {
+    return (
+      <SafeAreaView className="flex-1 bg-white">
+        <ErrorState message="Unable to load profile." onRetry={load} />
+      </SafeAreaView>
+    );
+  }
+
+  if (status === 'empty' || !twin) {
+    return (
+      <SafeAreaView className="flex-1 bg-white">
+        <EmptyState title="Twin not found." />
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView className="flex-1 bg-white">
-      <ScrollView className="flex-1">
-        <View className="p-6">
-          {/* Header */}
-          <View className="mb-6">
-            <Text className="text-3xl font-bold text-gray-900 mb-1">{twin.name}</Text>
-            <Text className="text-base text-gray-600">{twin.role}</Text>
-          </View>
+      {/* Pinned header — never scrolls away */}
+      <View className="px-6 pt-6 pb-4">
+        <Text className="text-3xl font-bold text-gray-900 mb-1">{twin.name}</Text>
+        <Text className="text-base text-gray-600">{twin.role}</Text>
+      </View>
 
+      <ScrollView className="flex-1">
+        <View className="px-6 pb-6">
           <ProfileSectionCard title="Decision Style">
             <Text className="text-sm text-gray-600 leading-5">{twin.decisionStyle}</Text>
           </ProfileSectionCard>
@@ -155,7 +214,7 @@ export default function TwinProfileScreen() {
         <Button
           title="Start Interview"
           onPress={() => {
-            // TODO: Phase 2/3 - wire to Interview Agent / useInterview()
+            // TODO: Phase 3 - wire to Interview Agent / useInterview() for re-interviewing an existing twin.
             console.log('Start Interview pressed');
           }}
           fullWidth
