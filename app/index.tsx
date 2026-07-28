@@ -6,7 +6,9 @@
  */
 
 import React from 'react';
-import { View, Text, ScrollView, SafeAreaView } from 'react-native';
+import { View, Text, ScrollView } from 'react-native';
+
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
@@ -68,6 +70,16 @@ export default function HomeScreen() {
               • Architecture in place
             </Text>
           </Card>
+
+          {/* Temporary: manual verification only, remove once Home -> Twin -> Project routing exists */}
+          <View className="mt-4">
+            <Button
+              title="Open Project Screen (Testing)"
+              variant="secondary"
+              onPress={() => router.push('/interview/create-project')}
+              fullWidth
+            />
+          </View>
         </View>
       </ScrollView>
     </SafeAreaView>

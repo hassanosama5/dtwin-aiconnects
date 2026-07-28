@@ -2,13 +2,13 @@
  * Conversation Tools
  *
  * Tools for managing chat messages and conversation history.
- * Phase 2 implementation placeholder.
  */
 
 import { supabase } from '../services/supabase';
 import { Message, MessageInsert, MessageMetadata } from '../types/database';
 import { ChatMessage } from '../types/conversation';
 import { logger } from '../utils/logger';
+import { Tool } from './types';
 
 /**
  * Save a message to the conversation
@@ -115,3 +115,22 @@ export async function clearConversationHistory(
     };
   }
 }
+
+/**
+ * ConversationTool
+ *
+ * Groups the conversation functions above under one named tool so agents can
+ * declare ownership (e.g. `tools: [ConversationTool]`) instead of importing
+ * these functions ad hoc.
+ */
+export const ConversationTool: Tool & {
+  save: typeof saveMessage;
+  getHistory: typeof getConversationHistory;
+  clear: typeof clearConversationHistory;
+} = {
+  name: 'ConversationTool',
+  description: 'Save and load chat message history for a project.',
+  save: saveMessage,
+  getHistory: getConversationHistory,
+  clear: clearConversationHistory,
+};

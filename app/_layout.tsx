@@ -6,11 +6,12 @@
 
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import '../global.css';
 
 export default function RootLayout() {
   return (
-    <>
+    <SafeAreaProvider>
       <StatusBar style="dark" />
       <Stack
         screenOptions={{
@@ -38,6 +39,12 @@ export default function RootLayout() {
           }}
         />
         <Stack.Screen
+          name="project/[id]"
+          options={{
+            title: 'Project',
+          }}
+        />
+        <Stack.Screen
           name="interview/create-twin"
           options={{
             title: 'Create Decision Twin',
@@ -58,6 +65,6 @@ export default function RootLayout() {
           }}
         />
       </Stack>
-    </>
+    </SafeAreaProvider>
   );
 }

@@ -4,15 +4,15 @@
  * Loads the person profile, project profile, and recent conversation history
  * before the Decision Agent runs so the agent can reason from stored context.
  */
-
 import { getConversationHistory } from '../tools/conversation';
 import { getPersonProfile } from '../tools/profile';
 import { getProjectProfile } from '../tools/project';
 import type { DecisionRequest } from '../types/agent';
 import type { ChatMessage } from '../types/conversation';
+import type { PersonProfile, ProjectProfile } from '../types/profile';
 import { logger } from '../utils/logger';
 
-const fallbackPersonProfile = {
+const fallbackPersonProfile: PersonProfile = {
   name: 'Represented Person',
   role: 'Team Lead',
   leadershipStyle: 'Collaborative and clear',
@@ -25,7 +25,7 @@ const fallbackPersonProfile = {
   generalPrinciples: ['Prefer straightforward tradeoffs', 'Escalate when uncertainty is high'],
 };
 
-const fallbackProjectProfile = {
+const fallbackProjectProfile: ProjectProfile = {
   name: 'Current Project',
   description: 'Project context is not yet available.',
   goal: 'Deliver a clear, reliable outcome',
@@ -39,30 +39,8 @@ const fallbackProjectProfile = {
 };
 
 export interface DecisionContext {
-  personProfile: {
-    name: string;
-    role: string;
-    leadershipStyle: string;
-    communicationStyle: string;
-    decisionStyle: string;
-    values: string[];
-    delegationRules: string[];
-    approvalRules: string[];
-    conflictResolution?: string;
-    generalPrinciples?: string[];
-  };
-  projectProfile: {
-    name: string;
-    description?: string;
-    goal: string;
-    timeline?: string;
-    priorities: string[];
-    constraints: string[];
-    decisionRules: string[];
-    escalationRules: string[];
-    tradeoffs?: string[];
-    currentChallenges?: string[];
-  };
+  personProfile: PersonProfile;
+  projectProfile: ProjectProfile;
   conversationHistory: ChatMessage[];
   contextSummary: string;
 }
@@ -89,10 +67,10 @@ export async function loadDecisionContext(
     ]);
 
     const personProfile = personResult.success
-      ? personResult.twin.personal_profile
+      ? (personResult.twin.personal_profile as PersonProfile)
       : request.context?.personProfile || fallbackPersonProfile;
     const projectProfile = projectResult.success
-      ? projectResult.project.project_profile
+      ? (projectResult.project.project_profile as ProjectProfile)
       : request.context?.projectProfile || fallbackProjectProfile;
     const conversationHistory = historyResult.success
       ? historyResult.messages
@@ -113,7 +91,10 @@ export async function loadDecisionContext(
       contextSummary,
     };
 
-    logger.info('Decision context loaded', { twinId: request.twinId, projectId: request.projectId });
+    logger.info('Decision context loaded', {
+      twinId: request.twinId,
+      projectId: request.projectId,
+    });
 
     return { success: true, context };
   } catch (error) {

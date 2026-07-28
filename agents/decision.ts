@@ -1,6 +1,7 @@
 /**
  * Decision Agent
  *
+<<<<<<< HEAD
  * Answers questions as the represented person would.
  */
 
@@ -10,14 +11,43 @@ import { decisionReasoningSkill } from '../skills/decisionReasoning';
 import { DecisionRequest, DecisionResponse, AgentResponse } from '../types/agent';
 import { DecisionResponseSchema } from '../utils/validation';
 import { logger } from '../utils/logger';
+=======
+ * Answers questions as the represented person's Decision Twin. Pure
+ * reasoning agent: declares no tools, because all of its context (Personal
+ * Profile, Project Profile, Conversation History) arrives pre-assembled via
+ * AgentContext from Middleware — it never fetches anything itself.
+ */
 
-export async function decisionAgent(
-  request: DecisionRequest
-): Promise<AgentResponse<DecisionResponse>> {
-  const startTime = performance.now();
+import { BaseAgent } from './BaseAgent';
+import { ClaudeMessage } from '../services/anthropic';
+import { decisionPrompt } from '../prompts/decision';
+import { decisionReasoningSkill } from '../skills/decisionReasoning';
+import { DecisionResponseSchema } from '../utils/validation';
+import { AgentContext, DecisionRequest, DecisionResponse } from '../types/agent';
+>>>>>>> origin/habiba
 
-  logger.agent('Decision', 'Processing question');
+export class DecisionAgent extends BaseAgent<DecisionRequest, DecisionResponse> {
+  constructor(model?: string) {
+    super({
+      name: 'Decision',
+      description: "Answers questions as the represented person's Decision Twin.",
+      responsibility:
+        'Reason only from the Personal Profile, Project Profile, and Conversation History provided in context. Never invent missing preferences.',
+      model,
+      systemPrompt: decisionPrompt,
+      skills: [decisionReasoningSkill],
+      tools: [],
+      outputSchema: DecisionResponseSchema,
+      errorOutput: { answer: '', reasoning: [], confidence: 0 },
+    });
+  }
 
+  protected buildMessages(request: DecisionRequest, context?: AgentContext): ClaudeMessage[] {
+    // Layering matches PROJECT_SPEC.md §6 "Shared Context": Personal Profile
+    // → Project Profile → Conversation History → Current Question.
+    const sections: string[] = [];
+
+<<<<<<< HEAD
   try {
     const contextSummary = request.context?.contextSummary || 'Profile context is unavailable.';
     const personProfile = request.context?.personProfile;
@@ -61,6 +91,24 @@ export async function decisionAgent(
       output: fallbackDecision,
       executionTime: performance.now() - startTime,
     };
+=======
+    if (context?.personProfile) {
+      sections.push(`Personal Profile:\n${JSON.stringify(context.personProfile, null, 2)}`);
+    }
+    if (context?.projectProfile) {
+      sections.push(`Project Profile:\n${JSON.stringify(context.projectProfile, null, 2)}`);
+    }
+    if (context?.conversationHistory?.length) {
+      const history = context.conversationHistory
+        .map((message) => `${message.role}: ${message.content}`)
+        .join('\n');
+      sections.push(`Conversation History:\n${history}`);
+    }
+
+    sections.push(`Question: ${request.question}`);
+
+    return [{ role: 'user', content: sections.join('\n\n') }];
+>>>>>>> origin/habiba
   }
 }
 

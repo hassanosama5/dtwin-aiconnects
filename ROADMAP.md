@@ -4,10 +4,122 @@
 
 This document is the single source of truth for implementation progress. It reflects the ACTUAL state of the codebase (verified by inspection), not the aspirational state described in `PROJECT_SPEC.md`.
 
-Strategy: **architecture-outward**, not vertical slicing. We build full horizontal layers (agents → app logic → frontend → polish) rather than one complete feature at a time. Within each phase, work is split between two developers by **domain**, not by layer, so each person owns a distinct set of files end-to-end within that phase and merge conflicts stay low.
+Strategy: **architecture-outward**, not vertical slicing. We build full horizontal layers (agents → app logic → frontend → polish) rather than one complete feature at a time. Phases, their order, and the tasks within them are unchanged from the original roadmap — only ownership has been rebalanced below for a four-person team.
 
-- **Developer A** — owns the *Twin & Project* domain: Coordinator + Interview Agents, profile/project data, twin/project screens.
-- **Developer B** — owns the *Decision & Chat* domain: Decision + Review Agents, conversation data, chat screen and agent-execution visualization.
+---
+
+## Team Structure
+
+This project is developed collaboratively by four developers, organized into two tracks.
+
+### Developer A — AI Core
+
+Team Members: **Hassan**, **Khaled**
+
+Responsible for implementing the complete multi-agent architecture.
+
+### Developer B — Application & Frontend
+
+Team Members: **Habiba**, **Omar**
+
+Responsible for application logic, persistence, infrastructure, and frontend.
+
+**Git workflow:** everyone works on their own feature branch. All work merges into `main` through Pull Requests. No one works directly on `main`.
+
+---
+
+## Rebalanced Ownership
+
+### Hassan — Twin Creation Pipeline
+
+Responsible for everything related to creating and maintaining Decision Twins.
+
+Owns:
+- Coordinator Agent
+- Interview Agent
+- Coordinator Prompt
+- Interview Prompt
+- Profile completeness validation
+- Twin / Project orchestration
+- Interview testing
+
+Primary files:
+- `agents/coordinator.ts`
+- `agents/interview.ts`
+- `prompts/coordinator.ts`
+- `prompts/interview.ts`
+- `hooks/useInterview.ts`
+- `hooks/useTwins.ts`
+- `hooks/useProjects.ts`
+- `tools/validateProfileCompleteness.ts`
+
+### Khaled — Decision Pipeline
+
+Responsible for answering questions using Decision Twins.
+
+Owns:
+- Decision Agent
+- Review Agent
+- Decision Prompt
+- Review Prompt
+- Middleware
+- Context Injection
+- Chat Hook
+- Decision testing
+- Review testing
+
+Primary files:
+- `agents/decision.ts`
+- `agents/review.ts`
+- `prompts/decision.ts`
+- `prompts/review.ts`
+- `middleware/`
+- `hooks/useChat.ts`
+
+### Habiba — Application Flow & UI
+
+Responsible for application flow and user experience.
+
+Owns:
+- Navigation
+- Home Screen
+- Twin Profile Screen
+- Project Screen
+- Interview UI
+- Zustand integration
+- Loading states
+- Empty states
+- Error states
+- App routing
+
+Primary folders:
+- `app/`
+- `store/`
+
+**Mandatory Skills:** whenever implementing UI, automatically use `frontend-design`, `theme-factory`, and `brand-guidelines`. These are not optional — see `CLAUDE.md`.
+
+### Omar — Infrastructure & Persistence
+
+Responsible for backend infrastructure and data persistence.
+
+Owns:
+- Supabase integration
+- Database migrations
+- Services
+- Existing Tools integration
+- Persistence
+- Environment configuration
+- Chat screen integration
+- Agent execution visualization integration
+
+Primary folders:
+- `services/`
+- `tools/`
+- `supabase/`
+
+Coordinate with Habiba when wiring backend services into frontend screens.
+
+---
 
 ## Status Legend
 
@@ -52,26 +164,37 @@ Confirmed by inspection — all of the following already exist and work:
 
 ## Phase 2 — Backend Architecture
 
-Goal: make all four agents real, wired to prompts/skills/tools, callable end-to-end with no UI involved yet (tested via scripts/console, not screens).
+Goal: make all four agents real, wired to prompts/skills/tools, callable end-to-end with no UI involved yet (tested via scripts/console, not screens). Following the architecture refactor documented in `ARCHITECTURE.md`, agents are class-based (`BaseAgent` subclasses) constructed via a shared `AgentRegistry`, with the Coordinator as the single orchestration layer — not four independent prompt-wrapper functions.
+
+### Shared agent framework (built first — unblocks everyone below)
 
 | Task | Owner | Status | Dependencies | Description |
 |---|---|---|---|---|
-| Scaffold `hooks/` and `middleware/` folders | A | 🔲 | Phase 1 | One-time folder creation so A and B never both create the same folder in parallel. A creates both empty folders with a placeholder `index.ts`/README so each dev's first file lands cleanly. |
-| Coordinator Agent | A | 🔲 | `prompts/coordinator.ts` ✅, `services/anthropic.ts` ✅ | Implement `agents/coordinator.ts`: call Claude with the coordinator prompt, validate against `CoordinatorResponseSchema`, return `{ workflow }`. Shared dependency for both devs' pipelines. |
-| Interview Agent | A | 🔲 | Coordinator Agent, `skills/personalInterview.ts` ✅, `skills/projectInterview.ts` ✅ | Implement `agents/interview.ts`: adaptive question loop, detects completeness, returns next question or final profile JSON. |
-| `validateProfileCompleteness()` tool | A | 🔲 | `types/profile.ts` ✅ | New tool (spec-recommended, currently missing). Checks required fields per `personalInterviewSkill`/`projectInterviewSkill` field lists; returns `{ complete, missingFields }`. Used by Interview Agent to decide the next question. |
-| Tool integration — profile/project | A | 🔲 | `tools/profile.ts` ✅, `tools/project.ts` ✅ (already built) | Wire existing `savePersonProfile`, `getPersonProfile`, `saveProjectProfile`, `getProjectProfile`, `listTwins`, `listProjects` into the Interview Agent's completion step. |
-| `useInterview()` hook | A | 🔲 | Interview Agent | `hooks/useInterview.ts` — drives the interview conversation state for the UI (Phase 4 consumer). |
-| `useTwins()` / `useProjects()` hooks | A | 🔲 | Tool integration (A) | `hooks/useTwins.ts`, `hooks/useProjects.ts` — list/fetch data for Home and Twin Profile screens. |
-| Decision Agent | B | 🔲 | Coordinator Agent, `skills/decisionReasoning.ts` ✅ | Implement `agents/decision.ts`: load context (via Middleware), call Claude with decision skill, return `{ answer, reasoning, confidence }`. |
-| Review Agent | B | 🔲 | Decision Agent, `skills/answerReview.ts` ✅ | Implement `agents/review.ts`: validate Decision Agent output, apply the 70% confidence threshold, return `{ approved, confidence, requiresHuman }`. |
-| Tool integration — conversation | B | 🔲 | `tools/conversation.ts` ✅ (already built) | Wire existing `saveMessage`, `getConversationHistory`, `clearConversationHistory` into the Decision Agent's context loading and post-answer save step. |
-| Middleware — context injection | B | 🔲 | Decision Agent, Tool integration (B) | `middleware/loadDecisionContext.ts` — the spec's required context-injection layer: auto-loads Personal Profile + Project Profile + last 10–20 messages before the Decision Agent runs, so the agent never fetches data itself. |
-| `useChat()` hook | B | 🔲 | Decision Agent, Review Agent, Middleware | `hooks/useChat.ts` — drives the chat screen's send/receive/agent-status state (Phase 4 consumer). |
-| End-to-end pipeline — Twin/Project creation | A | 🔲 | Coordinator, Interview Agent, tool integration (A) | Verify `Coordinator → Interview Agent → save*Profile → Done` runs correctly for both CREATE_TWIN and CREATE_PROJECT workflows via a console/script test. |
-| End-to-end pipeline — Chat | B | 🔲 | Coordinator, Decision Agent, Review Agent, Middleware | Verify `Coordinator → Decision Agent → Review Agent → Answer` runs correctly via a console/script test, including the low-confidence escalation path. |
-| Agent testing — Coordinator/Interview | A | 🔲 | End-to-end pipeline (A) | Manual test scripts covering all 4 workflow routes + interview completion edge cases. |
-| Agent testing — Decision/Review | B | 🔲 | End-to-end pipeline (B) | Manual test scripts covering high-confidence, low-confidence/escalation, and missing-context cases from the spec's Error States section. |
+| `BaseAgent` abstract class | Hassan | ✅ | `services/anthropic.ts` ✅, `types/agent.ts` ✅ | `agents/BaseAgent.ts` — the shared lifecycle (`execute()` → buildPrompt → buildMessages → chat() → postProcess → AgentResponse). Every agent extends this; only `buildMessages()`/`postProcess()` are overridden (plus the narrow, defaulted `selectSkills()` hook added during implementation for agents that own more than one skill). |
+| `Skill` interface | Hassan | ✅ | none | `skills/types.ts` — formal shape (`name`, `description`, `instructions`, `examples?`, `metadata?`). Existing skill files reshaped to conform, content unchanged. |
+| `Tool` interface + wrappers | Hassan | ✅ | `tools/profile.ts` ✅, `project.ts` ✅, `conversation.ts` ✅ | `tools/types.ts` + additive named exports (`ProfileTool`, `ProjectTool`, `ConversationTool`) grouping the existing, unmodified functions so agents can declare ownership instead of importing functions ad hoc. |
+| `AgentRegistry` | Hassan | ✅ | BaseAgent, all four concrete agents | `agents/AgentRegistry.ts` — `createAgentRegistry(model?)` constructs all four agents and injects Interview/Decision/Review into Coordinator. Performs no orchestration itself, only construction/wiring. |
+
+Built by Hassan as shared foundation since this session's refactor covers the whole agent layer; Khaled's Decision/Review agents (below) depend on `BaseAgent` and the `Tool`/`Skill` interfaces existing first.
+
+### Per-agent implementation
+
+| Task | Owner | Status | Dependencies | Description |
+|---|---|---|---|---|
+| Scaffold `hooks/` folder | Hassan | 🔲 | Phase 1 | One-time folder creation. Hassan creates `hooks/` (he owns 3 of its 4 files); Khaled adds `useChat.ts` into it independently once created. `middleware/` is created by Khaled directly as part of his own Middleware task — no shared scaffolding needed since it's a single-owner folder. |
+| Coordinator Agent | Hassan | ✅ | BaseAgent, AgentRegistry, Interview/Decision/Review agents, Middleware | `agents/coordinator.ts` — `CoordinatorAgent extends BaseAgent`. Its LLM call still only classifies intent (`CoordinatorResponseSchema` → `{ workflow }`, prompt/schema unchanged); `postProcess()` is now where orchestration happens — it invokes Interview or (Middleware → Decision → Review) based on the classified workflow, and returns the final pipeline result. This is the single orchestration layer; there is no separate workflow-runner. Also owns `ConversationTool` (deviation from spec's original "Tools: None," see `DECISIONS.md` #006) to save the question and final answer/escalation notice. |
+| Interview Agent | Hassan | ✅ | BaseAgent, Skill/Tool interfaces, `skills/personalInterview.ts` ✅, `skills/projectInterview.ts` ✅ | `agents/interview.ts` — `InterviewAgent extends BaseAgent`, declares `[ProfileTool, ProjectTool, ValidationTool]`. `postProcess()` validates completeness via `ValidationTool` and saves via `ProfileTool`/`ProjectTool` once genuinely complete. |
+| `validateProfileCompleteness()` tool | Hassan | ✅ | `types/profile.ts` ✅ | `tools/validateProfileCompleteness.ts`, exposed as `ValidationTool`. Checks required fields per `personalInterviewSkill`/`projectInterviewSkill` metadata; returns `{ complete, missingFields }`. |
+| `useInterview()` hook | Hassan | 🔲 | Interview Agent, AgentRegistry | `hooks/useInterview.ts` — drives the interview conversation state for the UI (consumed by Habiba in Phase 4) by calling `registry.coordinator.execute()`. |
+| `useTwins()` / `useProjects()` hooks | Hassan | 🔲 | Tool wrappers | `hooks/useTwins.ts`, `hooks/useProjects.ts` — list/fetch data for Home and Twin Profile screens, via `ProfileTool.list`/`ProjectTool.list` directly (no LLM reasoning involved, so no Coordinator round-trip for pure reads). |
+| Decision Agent | Khaled | ✅ | BaseAgent, Skill/Tool interfaces, `skills/decisionReasoning.ts` ✅ | `agents/decision.ts` — `DecisionAgent extends BaseAgent`, declares no tools (all context arrives via Middleware). Implemented by Hassan as part of the architecture-refactor pass since Coordinator needed a concrete class to hold a reference to; flagged for Khaled's review since this crosses ownership boundaries. |
+| Review Agent | Khaled | ✅ | Decision Agent, `skills/answerReview.ts` ✅ | `agents/review.ts` — `ReviewAgent extends BaseAgent`, declares no tools. Validates Decision Agent output, applies the 70% confidence threshold, returns `{ approved, confidence, requiresHuman }`. Implemented by Hassan in the same architecture-refactor pass as Decision Agent — flagged for Khaled's review. |
+| Middleware — context injection | Khaled | ✅ | Decision Agent, Tool wrappers | `middleware/loadDecisionContext.ts` — invoked by the Coordinator (not by DecisionAgent itself, and not by a workflow-runner) immediately before `DecisionAgent.execute()`. Assembles Personal Profile + Project Profile + last 10–20 messages via `ProfileTool`/`ProjectTool`/`ConversationTool`. Implemented by Hassan alongside Coordinator, since Coordinator is the only caller — flagged for Khaled's review. |
+| `useChat()` hook | Khaled | 🔲 | Decision Agent, Review Agent, Middleware, AgentRegistry | `hooks/useChat.ts` — drives the chat screen's send/receive/agent-status state (consumed by Habiba/Omar in Phase 4) by calling `registry.coordinator.execute()`. Not yet started — still Khaled's to build. |
+| End-to-end pipeline — Twin/Project creation | Hassan | 🟡 | Coordinator, Interview Agent, AgentRegistry | Live-verified against real Claude (`.env` now populated): CREATE_TWIN kickoff and a follow-up turn using conversation history both return correctly-shaped, schema-valid JSON, with the Coordinator correctly routing to Interview. Not yet verified: CREATE_PROJECT routing, a full interview reaching `complete: true`, and the ProfileTool/ProjectTool save step (needs 6-8 real turns to reach naturally — not run to conserve API calls). |
+| End-to-end pipeline — Chat | Khaled | 🟡 | Coordinator, Decision Agent, Review Agent, Middleware | Live-verified: Coordinator correctly classifies CHAT and its missing-twinId/projectId guard throws and is caught by BaseAgent's error handling as designed. Not yet verified: the actual Decision → Review path, since that needs a real twinId/projectId from a completed, saved twin/project (none exist yet). |
+| Agent testing — Coordinator/Interview | Hassan | 🟡 | End-to-end pipeline (Hassan) | Basic live coverage above. Still needed: full interview-to-completion run, CREATE_PROJECT, and contradiction-detection edge cases. |
+| Agent testing — Decision/Review | Khaled | 🔲 | End-to-end pipeline (Khaled) | Manual test scripts covering high-confidence, low-confidence/escalation, and missing-context cases from the spec's Error States section. Needs a real twin+project to exist first (see row above). |
 
 **Phase 2 exit criteria:** both pipelines can be triggered from a script/console call (no UI) and return correctly-shaped, schema-valid JSON.
 
@@ -83,15 +206,15 @@ Goal: connect Phase 2's agents/hooks to real persisted data and real navigation 
 
 | Task | Owner | Status | Dependencies | Description |
 |---|---|---|---|---|
-| Supabase project provisioning + apply migration | A | 🔲 | Phase 1 migration file ✅ | **Blocking task** — create a real Supabase project, run `001_initial_schema.sql`, populate `.env` with real `EXPO_PUBLIC_SUPABASE_URL` / `EXPO_PUBLIC_SUPABASE_ANON_KEY` / `EXPO_PUBLIC_ANTHROPIC_API_KEY`. Both developers are blocked on this for any live testing. |
-| Twin creation flow | A | 🔲 | Interview Agent, `useInterview()`, `useTwins()` | Wire `app/interview/create-twin.tsx` to the real interview hook/agent instead of placeholder text. |
-| Project creation flow | A | 🔲 | Interview Agent, `useInterview()`, `useProjects()` | Wire `app/interview/create-project.tsx` similarly. |
-| Persistence — profile/project data | A | 🔲 | Tool integration (A) | Confirm round-trip: interview → save → reload on Home/Twin screens. |
-| Routing — Home → Twin → Project | A | 🔲 | Twin/Project creation flows | Add the currently-missing **Project screen route** (`app/project/[id].tsx`) and wire navigation params (`twinId`, `projectId`) through Home → Twin Profile → Project. Touches `app/_layout.tsx` — coordinate with B before editing (shared file). |
-| Persistence — conversation data | B | 🔲 | Tool integration (B) | Confirm round-trip: chat message → save → reload conversation history. |
-| Routing — Project → Chat | B | 🔲 | `useChat()` | Wire navigation from the new Project screen's "Chat with Decision Twin" button into `app/chat/[projectId].tsx`. Also touches `app/_layout.tsx` — coordinate with A. |
-| State management review | A | 🔲 | Twin/Project flows | Confirm `store/appStore.ts` (already built) needs no changes for currentTwin/currentProject; add interview-draft state only if the interview UI needs it. |
-| State management review | B | 🔲 | Chat flow | Confirm `agentExecution` state in `store/appStore.ts` (already built) is sufficient for driving the Chat screen's visualization; extend only if needed. |
+| Supabase project provisioning + apply migration | Omar | 🔲 | Phase 1 migration file ✅ | **Blocking task** — create a real Supabase project, run `001_initial_schema.sql`, populate `.env` with real `EXPO_PUBLIC_SUPABASE_URL` / `EXPO_PUBLIC_SUPABASE_ANON_KEY` / `EXPO_PUBLIC_ANTHROPIC_API_KEY`. All four developers are blocked on this for any live testing. |
+| Twin creation flow | Habiba | 🔲 | Interview Agent (Hassan), `useInterview()` (Hassan), `useTwins()` (Hassan) | Wire `app/interview/create-twin.tsx` to the real interview hook instead of placeholder text. |
+| Project creation flow | Habiba | 🔲 | Interview Agent (Hassan), `useInterview()` (Hassan), `useProjects()` (Hassan) | Wire `app/interview/create-project.tsx` similarly. |
+| Persistence — profile/project data | Omar | 🔲 | Tool integration (Omar) | Confirm round-trip: interview → save → reload on Home/Twin screens. Coordinate with Hassan (agent side) and Habiba (screen side). |
+| Routing — Home → Twin → Project | Habiba | 🔲 | Twin/Project creation flows | Add the currently-missing **Project screen route** (`app/project/[id].tsx`) and wire navigation params (`twinId`, `projectId`) through Home → Twin Profile → Project. Touches `app/_layout.tsx` — coordinate with any other route additions before editing (shared file). |
+| Persistence — conversation data | Omar | 🔲 | Tool integration (Omar) | Confirm round-trip: chat message → save → reload conversation history. Coordinate with Khaled (agent side). |
+| Routing — Project → Chat | Habiba | 🔲 | `useChat()` (Khaled) | Wire navigation from the new Project screen's "Chat with Decision Twin" button into `app/chat/[projectId].tsx`. Also touches `app/_layout.tsx` — coordinate with other route additions. |
+| State management review — Twin/Project | Habiba | 🔲 | Twin/Project flows | Confirm `store/appStore.ts` (already built) needs no changes for currentTwin/currentProject; add interview-draft state only if the interview UI needs it. |
+| State management review — Chat | Habiba | 🔲 | Chat flow (Khaled), Chat screen integration (Omar) | Confirm `agentExecution` state in `store/appStore.ts` (already built) is sufficient for driving the Chat screen's visualization; extend only if needed. |
 
 **Phase 3 exit criteria:** creating a twin, creating a project, and exchanging a chat message all persist to and reload from a real Supabase project.
 
@@ -103,17 +226,18 @@ Goal: replace every placeholder screen with the real, polished UI described in `
 
 | Task | Owner | Status | Dependencies | Description |
 |---|---|---|---|---|
-| Home screen | A | 🔲 | `useTwins()`, Phase 3 | Real twin list with search bar, twin cards (name/role/project count), FAB "Create Twin", empty state ("No Twins yet"). |
-| Twin Profile screen | A | 🔲 | `useTwins()`, `useProjects()` | Header, role, summary tags, project list, "Ask [Name]" primary action, "Edit Twin" (owner only). |
-| Project screen (new) | A | 🔲 | Routing (A, Phase 3) | New screen: Goal / Priorities / Constraints / Decision Rules / Escalation Rules cards + "Chat with Decision Twin" button. This is the screen identified as missing during spec review. |
-| Interview UI | A | 🔲 | `useInterview()` | Conversational chat-style UI for both create-twin and create-project flows; "Generating Decision Twin..." transition; animated profile reveal on completion. |
-| Loading states — Twin/Project/Interview | A | 🔲 | Above screens | "Loading Profile...", "Interviewing..." per spec's Visual Feedback section. |
-| Empty states | A | 🔲 | Home, Twin Profile | "No Twins yet" / "No projects found" per spec text. |
-| Error states — Interview | A | 🔲 | Interview UI | "The Decision Twin needs more project context..." per spec. |
-| Chat screen | B | 🔲 | `useChat()`, Phase 3 | iMessage-style chat UI: message bubbles, answer with reasoning bullets + confidence %. |
-| Agent execution visualization — wiring | B | 🔲 | Chat screen, `useChat()` | Connect the **already-built** `AgentExecution.tsx` component to real `agentExecution` store state driven by the live Coordinator → Decision → Review pipeline (currently only animates in isolation). |
-| Loading states — Chat | B | 🔲 | Chat screen | "Reasoning...", "Reviewing..." per spec's Visual Feedback section. |
-| Error states — Chat | B | 🔲 | Chat screen | "This decision requires Hassan's approval" (low confidence) per spec's Error States section. |
+| Home screen | Habiba | 🔲 | `useTwins()` (Hassan), Phase 3 | Real twin list with search bar, twin cards (name/role/project count), FAB "Create Twin", empty state ("No Twins yet"). |
+| Twin Profile screen | Habiba | 🔲 | `useTwins()`, `useProjects()` (Hassan) | Header, role, summary tags, project list, "Ask [Name]" primary action, "Edit Twin" (owner only). |
+| Project screen (new) | Habiba | 🔲 | Routing (Habiba, Phase 3) | New screen: Goal / Priorities / Constraints / Decision Rules / Escalation Rules cards + "Chat with Decision Twin" button. This is the screen identified as missing during spec review. |
+| Interview UI | Habiba | 🔲 | `useInterview()` (Hassan) | Conversational chat-style UI for both create-twin and create-project flows; "Generating Decision Twin..." transition; animated profile reveal on completion. |
+| Loading states — Twin/Project/Interview | Habiba | 🔲 | Above screens | "Loading Profile...", "Interviewing..." per spec's Visual Feedback section. |
+| Empty states | Habiba | 🔲 | Home, Twin Profile | "No Twins yet" / "No projects found" per spec text. |
+| Error states — Interview | Habiba | 🔲 | Interview UI | "The Decision Twin needs more project context..." per spec. |
+| Chat screen | Habiba | 🔲 | `useChat()` (Khaled), Phase 3 | Build the iMessage-style chat UI shell: message bubbles, answer display with reasoning bullets + confidence %. Omar then performs the backend wiring (see next row) — coordinate handoff. |
+| Chat screen integration | Omar | 🔲 | Chat screen (Habiba), `useChat()` (Khaled) | Wire Habiba's chat UI to the live `useChat()` hook and conversation persistence so messages actually send/receive through the real pipeline. |
+| Agent execution visualization — wiring | Omar | 🔲 | Chat screen integration, Khaled's pipeline | Connect the **already-built** `AgentExecution.tsx` component to real `agentExecution` store state driven by the live Coordinator → Decision → Review pipeline (currently only animates in isolation). |
+| Loading states — Chat | Habiba | 🔲 | Chat screen | "Reasoning...", "Reviewing..." per spec's Visual Feedback section. |
+| Error states — Chat | Habiba | 🔲 | Chat screen | "This decision requires Hassan's approval" (low confidence) per spec's Error States section. |
 
 **Phase 4 exit criteria:** the full demo flow (create twin → create project → chat → see agent animation → get answer with reasoning/confidence) works from real UI, no placeholders remaining.
 
@@ -125,34 +249,58 @@ Goal: presentation-quality finish for the demo.
 
 | Task | Owner | Status | Dependencies | Description |
 |---|---|---|---|---|
-| Animations — navigation/lists | A | 🔲 | Phase 4 (A screens) | Screen transitions, card reveal animations (profile generation reveal). |
-| Visual refinements — Twin/Project/Interview | A | 🔲 | Phase 4 (A screens) | Spacing, typography, icon polish per Linear/Apple/Notion direction. |
-| Demo seed data — twins & projects | A | 🔲 | Phase 3 persistence | Seed Hassan Osama / Khaled Ashraf twins + Banking App / AI Dashboard projects, matching the spec's example scenario (the migration file already has a commented-out seed insert to adapt). |
-| Animations — chat/agent visualization | B | 🔲 | Phase 4 (B screens) | Refine timing so the Coordinator→Decision→Review animation reliably completes in <2 seconds per spec. |
-| Visual refinements — Chat | B | 🔲 | Phase 4 (B screens) | Bubble styling, confidence badge styling. |
-| Demo seed data — sample conversation | B | 🔲 | Demo seed data (A), Phase 3 persistence | Pre-seeded chat messages supporting the demo script's two example questions (delay release; budget increase → escalation). |
-| Bug fixing | A + B | 🔲 | All above | Ongoing, each dev fixes bugs within their own domain files. |
-| Performance improvements | A + B | 🔲 | All above | Reduce agent round-trip latency, verify list rendering performance. |
-| Final demo preparation | A + B | 🔲 | All above | Rehearse the spec's 8-step demo script; prepare architecture diagram/slides. |
+| Animations — navigation/lists | Habiba | 🔲 | Phase 4 (Habiba's screens) | Screen transitions, card reveal animations (profile generation reveal). |
+| Visual refinements — Twin/Project/Interview | Habiba | 🔲 | Phase 4 (Habiba's screens) | Spacing, typography, icon polish per Linear/Apple/Notion direction. |
+| Demo seed data — twins & projects | Omar | 🔲 | Phase 3 persistence (Omar) | Seed Hassan Osama / Khaled Ashraf twins + Banking App / AI Dashboard projects, matching the spec's example scenario (the migration file already has a commented-out seed insert to adapt). |
+| Animations — chat/agent visualization | Habiba | 🔲 | Phase 4 (Chat screen, agent visualization wiring) | Refine timing so the Coordinator→Decision→Review animation reliably completes in <2 seconds per spec. Coordinate with Khaled (agent timing) and Omar (live-state wiring). |
+| Visual refinements — Chat | Habiba | 🔲 | Phase 4 (Chat screen) | Bubble styling, confidence badge styling. |
+| Demo seed data — sample conversation | Omar | 🔲 | Demo seed data (Omar), Phase 3 persistence | Pre-seeded chat messages supporting the demo script's two example questions (delay release; budget increase → escalation). |
+| Bug fixing | Hassan, Khaled, Habiba, Omar | 🔲 | All above | Ongoing, each developer fixes bugs within their own domain files. |
+| Performance improvements | Hassan, Khaled, Habiba, Omar | 🔲 | All above | Reduce agent round-trip latency, verify list rendering performance. |
+| Final demo preparation | Hassan, Khaled, Habiba, Omar | 🔲 | All above | Rehearse the spec's 8-step demo script; prepare architecture diagram/slides. |
+
+---
+
+## Collaboration Rules
+
+- Every developer works on an independent feature branch.
+- All changes merge into `main` through Pull Requests — no direct commits to `main`.
+- Respect ownership whenever possible; if you need to touch a file outside your ownership, flag it in the PR description.
+- Small PRs are preferred over large ones — one task from the tables above per PR where practical.
+- Coordinate before modifying shared files, in particular: `app/_layout.tsx` (routes, touched by Habiba), `store/appStore.ts` (touched by Habiba), and `hooks/` (created by Hassan, added to by Khaled).
+- Keep documentation synchronized after completing work (see Documentation Rules below).
+
+## Documentation Rules
+
+Whenever a feature is completed:
+- Update `ROADMAP.md` (move the task's status from 🔲 → 🟡 → ✅).
+- Update `TASKS.md`.
+- Update `DECISIONS.md` if the change involves an architecture decision.
 
 ---
 
 ## Current Milestone
 
-**Phase 1 (Foundation) is complete.** The project has a full type system, working Supabase/Anthropic service wrappers, real (not stubbed) data tools, all prompts and skills written, reusable UI components, and a fully-built (but unwired) agent-execution animation. No agent logic and no real screens exist yet — everything user-facing is a placeholder.
+**Phase 1 (Foundation) is complete.** **Phase 2's agent layer is now implemented and type-checked**, following the architecture refactor recorded in `ARCHITECTURE.md` and `DECISIONS.md` #004–#006: `BaseAgent`, the `Skill`/`Tool` interfaces, `AgentRegistry`, `middleware/loadDecisionContext.ts`, and all four agents (`CoordinatorAgent`, `InterviewAgent`, `DecisionAgent`, `ReviewAgent`) exist as real classes with the Coordinator as the single orchestration layer — not four prompt-wrapper stubs. This was built by Hassan in one pass across five commits (docs → Skill/Tool interfaces → BaseAgent + leaf agents → Middleware → Coordinator + Registry) because the refactor is cross-cutting by nature: Coordinator needs concrete Decision/Review classes to hold references to, so it couldn't be split mid-flight along the original per-developer ownership lines. This touches `agents/decision.ts`, `agents/review.ts`, and `middleware/loadDecisionContext.ts` — nominally Khaled's files — flagged above for his review; his branch had no prior work on them (checked before starting) so nothing was overwritten.
+
+**Update:** `.env` has since been populated with real credentials and the pipeline has been live-tested (see Phase 2 rows above and `DECISIONS.md`-adjacent note in `prompts/interview.ts`'s commit) — CREATE_TWIN's Coordinator → Interview routing works end-to-end against real Claude, including using conversation history correctly on a follow-up turn, and the CHAT path's missing-context guard fires correctly. One real bug was found and fixed live: `prompts/interview.ts` didn't specify the required JSON shape for incomplete turns, so Claude sometimes omitted `complete` entirely and failed schema validation — fixed by spelling out both shapes explicitly in the prompt.
+
+**Still not done:** a full interview run to `complete: true` (to exercise `ValidationTool` + the `ProfileTool`/`ProjectTool` save step), CREATE_PROJECT, and the live Decision → Review path (needs a real saved twin/project first). `hooks/useInterview.ts`/`useTwins.ts`/`useProjects.ts` (Hassan) and `hooks/useChat.ts` (Khaled) haven't been started. Habiba/Omar's Phase 3/4 work is unaffected and can still proceed in parallel.
 
 ## Next Priority
 
-1. **Unblock testing** — provision a real Supabase project and populate `.env` (currently the single biggest blocker; owner: A, but both devs need it).
-2. **In parallel:** Developer A implements the Coordinator + Interview Agents; Developer B implements the Decision + Review Agents. These are independent file sets (`agents/coordinator.ts`+`interview.ts` vs. `agents/decision.ts`+`review.ts`) and can start immediately without waiting on each other, since both only depend on already-complete Phase 1 work (prompts, skills, services).
+1. Hassan: run a full interview to completion to verify the save path, then start `hooks/useInterview.ts`/`useTwins.ts`/`useProjects.ts`.
+2. Khaled: build Decision + Review confidence in the same way once a real twin/project exists to test against; start `hooks/useChat.ts`.
+3. Omar: confirm `projects` and `messages` tables exist (only `twins` has been verified live) and continue Phase 3 persistence work.
+4. Habiba: static screen shells (Home, Twin Profile, Project, Chat UI) using placeholder data can proceed now, independent of the above.
 
 ## Blockers
 
-- **No `.env` configured** — no Anthropic API key, no Supabase project. Nothing beyond static UI can be tested until this exists.
-- **Database migration not yet applied** — `001_initial_schema.sql` is written but has never been run against a live database.
-- **No dedicated Project screen** — spec requires Home → Twin → Project → Chat, but no `app/project/[id].tsx` route exists yet. Needs to be created in Phase 3/4 before Developer A's routing work can complete.
-- **Shared file coordination** — `app/_layout.tsx` will be edited by both developers when registering new routes (Project screen by A, any Chat-related route changes by B). Coordinate via small, frequent commits to this one file rather than large simultaneous edits.
-- **`hooks/` and `middleware/` folders don't exist yet** — first tasks in Phase 2 create these; recommend A scaffolds both empty folders in one small commit before either developer adds their first hook, so folder creation itself isn't a merge conflict.
+- ~~No `.env` configured~~ — **Resolved.** `.env` now has real `EXPO_PUBLIC_ANTHROPIC_API_KEY`/`EXPO_PUBLIC_SUPABASE_URL`/`EXPO_PUBLIC_SUPABASE_ANON_KEY` values (verified by live-testing the agent pipeline, see Phase 2 rows above).
+- **Database migration status is partially confirmed, not fully.** Live testing confirmed the `twins` table exists and is queryable (`ProfileTool.list()` returned `{ success: true, twins: [] }` against the real Supabase project). `projects` and `messages` tables have not been checked yet — Omar should confirm the full `001_initial_schema.sql` migration ran, not just `twins`.
+- **No dedicated Project screen** — spec requires Home → Twin → Project → Chat, but no `app/project/[id].tsx` route exists yet. Needs to be created by Habiba in Phase 3/4 before her routing work can complete.
+- **Shared file coordination** — `app/_layout.tsx` will be edited by Habiba for all new route registrations; since she now owns this file exclusively, cross-developer conflicts on it should be rare, but she should still land route additions in small, frequent PRs rather than one large one.
+- **`hooks/` still doesn't exist** — `middleware/` was created as part of this session's Coordinator/Middleware work (`middleware/loadDecisionContext.ts`). `hooks/` is next: Hassan scaffolds it before his first hook task (`useInterview`/`useTwins`/`useProjects`); Khaled adds `useChat.ts` independently once it exists.
 
 ## Future Improvements
 
