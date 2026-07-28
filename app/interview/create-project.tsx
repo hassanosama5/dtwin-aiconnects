@@ -11,17 +11,32 @@ import { View, Text } from 'react-native';
 // collapses to zero height under the New Architecture on iOS.
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { InterviewChat } from '../../components/shared/InterviewChat';
+import { InterviewChat, InterviewQuestion } from '../../components/shared/InterviewChat';
 import { ProfileSectionCard, BulletList } from '../../components/cards/ProfileSectionCard';
 
 // Placeholder script — replace with the real Interview Agent conversation in Phase 3.
-const QUESTIONS = [
-  "Let's learn about your project. What's the project name?",
-  'What is the goal of this project?',
-  'What are the main priorities?',
-  'What constraints should the Decision Twin be aware of?',
-  'What decision rules should guide trade-offs?',
-  'When should this be escalated to you directly?',
+const QUESTIONS: InterviewQuestion[] = [
+  { text: "Let's learn about your project. What's the project name?" },
+  {
+    text: 'What is the goal of this project?',
+    suggestions: ['Ship on time', 'Increase revenue', 'Improve retention', 'Reduce costs'],
+  },
+  {
+    text: 'What are the main priorities?',
+    suggestions: ['Security', 'Performance', 'User experience', 'Compliance'],
+  },
+  {
+    text: 'What constraints should the Decision Twin be aware of?',
+    suggestions: ['Fixed deadline', 'Limited budget', 'Small team', 'Legacy system'],
+  },
+  {
+    text: 'What decision rules should guide trade-offs?',
+    suggestions: ['Prioritize security', 'Never miss deadlines', 'User impact first'],
+  },
+  {
+    text: 'When should this be escalated to you directly?',
+    suggestions: ['Budget changes', 'Timeline changes', 'Scope changes', 'Security issues'],
+  },
 ];
 
 const LOADING_LINES = ['Reviewing project details...', 'Building your Project Profile...'];
@@ -35,11 +50,14 @@ export default function CreateProjectScreen() {
         questions={QUESTIONS}
         loadingTitle="Generating Project Profile..."
         loadingLines={LOADING_LINES}
+        successMessage="Project Profile Generated"
         onDone={() => router.back()}
-        summary={
+        summary={(answers) => (
           <>
             <View className="mb-6">
-              <Text className="text-3xl font-bold text-gray-900 mb-1">Banking App</Text>
+              <Text className="text-3xl font-bold text-gray-900 mb-1">
+                {answers[0]?.trim() || 'Banking App'}
+              </Text>
               <Text className="text-base text-gray-600">Project Profile</Text>
             </View>
 
@@ -76,7 +94,7 @@ export default function CreateProjectScreen() {
               />
             </ProfileSectionCard>
           </>
-        }
+        )}
       />
     </SafeAreaView>
   );

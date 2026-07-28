@@ -4,8 +4,8 @@
  * Reusable button with variants inspired by Linear/Apple design.
  */
 
-import React from 'react';
-import { TouchableOpacity, Text, ActivityIndicator, View } from 'react-native';
+import React, { useRef } from 'react';
+import { TouchableOpacity, Text, ActivityIndicator, View, Animated } from 'react-native';
 import { theme } from '../../constants/theme';
 
 type ButtonVariant = 'primary' | 'secondary' | 'ghost';
@@ -32,6 +32,16 @@ export function Button({
   fullWidth = false,
   icon,
 }: ButtonProps) {
+  const scale = useRef(new Animated.Value(1)).current;
+
+  function handlePressIn() {
+    Animated.timing(scale, { toValue: 0.96, duration: 100, useNativeDriver: true }).start();
+  }
+
+  function handlePressOut() {
+    Animated.timing(scale, { toValue: 1, duration: 100, useNativeDriver: true }).start();
+  }
+
   const getVariantStyles = () => {
     switch (variant) {
       case 'primary':
@@ -57,7 +67,7 @@ export function Button({
   const getSizeStyles = () => {
     switch (size) {
       case 'sm':
-        return 'px-3 py-2';
+        return 'px-3 py-2.5';
       case 'md':
         return 'px-4 py-3';
       case 'lg':
@@ -77,41 +87,45 @@ export function Button({
   };
 
   return (
-    <TouchableOpacity
-      onPress={onPress}
-      disabled={disabled || loading}
-      activeOpacity={0.7}
-      className={`
-        ${getVariantStyles()}
-        ${getSizeStyles()}
-        ${fullWidth ? 'w-full' : ''}
-        rounded-lg
-        border
-        flex-row
-        items-center
-        justify-center
-        ${disabled || loading ? 'opacity-50' : ''}
-      `}
-    >
-      {loading ? (
-        <ActivityIndicator
-          size="small"
-          color={variant === 'primary' ? '#ffffff' : theme.colors.primary[600]}
-        />
-      ) : (
-        <View className="flex-row items-center gap-2">
-          {icon && <View>{icon}</View>}
-          <Text
-            className={`
-              ${getTextStyles()}
-              ${getTextSizeStyles()}
-              font-semibold
-            `}
-          >
-            {title}
-          </Text>
-        </View>
-      )}
-    </TouchableOpacity>
+    <Animated.View style={{ transform: [{ scale }], width: fullWidth ? '100%' : undefined }}>
+      <TouchableOpacity
+        onPress={onPress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        disabled={disabled || loading}
+        activeOpacity={0.7}
+        className={`
+          ${getVariantStyles()}
+          ${getSizeStyles()}
+          ${fullWidth ? 'w-full' : ''}
+          rounded-lg
+          border
+          flex-row
+          items-center
+          justify-center
+          ${disabled || loading ? 'opacity-50' : ''}
+        `}
+      >
+        {loading ? (
+          <ActivityIndicator
+            size="small"
+            color={variant === 'primary' ? '#ffffff' : theme.colors.primary[600]}
+          />
+        ) : (
+          <View className="flex-row items-center gap-2">
+            {icon && <View>{icon}</View>}
+            <Text
+              className={`
+                ${getTextStyles()}
+                ${getTextSizeStyles()}
+                font-semibold
+              `}
+            >
+              {title}
+            </Text>
+          </View>
+        )}
+      </TouchableOpacity>
+    </Animated.View>
   );
 }

@@ -1,47 +1,55 @@
 /**
  * Typing Indicator
  *
- * Three softly pulsing dots inside a bubble, shown in the agent's position
- * while a response is in flight. No label needed — the motion itself reads
- * as "responding," matching restrained, non-chatbot-y motion.
+ * Three bouncing dots. Used inside a ChatBubble (via its `typing` prop) to
+ * represent "AI is typing…" / "Thinking…" — kept as a standalone export too,
+ * in case a caller needs the dots outside a bubble.
  */
 
-import React, { useEffect } from 'react';
-import { View } from 'react-native';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withDelay,
-  withRepeat,
-  withSequence,
-  withTiming,
-  Easing,
-} from 'react-native-reanimated';
+import React, { useEffect, useRef } from 'react';
+import { View, Animated } from 'react-native';
 
-function Dot({ delay }: { delay: number }) {
-  const opacity = useSharedValue(0.3);
+function useDotAnimation(delay: number) {
+  const value = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    opacity.value = withDelay(
-      delay,
-      withRepeat(
-        withSequence(
-          withTiming(1, { duration: 350, easing: Easing.ease }),
-          withTiming(0.3, { duration: 350, easing: Easing.ease })
-        ),
-        -1
-      )
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.delay(delay),
+        Animated.timing(value, { toValue: 1, duration: 300, useNativeDriver: true }),
+        Animated.timing(value, { toValue: 0, duration: 300, useNativeDriver: true }),
+        Animated.delay(300),
+      ])
     );
-  }, [delay, opacity]);
+    animation.start();
+    return () => animation.stop();
+  }, [delay, value]);
 
-  const style = useAnimatedStyle(() => ({ opacity: opacity.value }));
+  return value;
+}
 
-  return <Animated.View style={style} className="w-1.5 h-1.5 rounded-full bg-gray-400 mx-0.5" />;
+function Dot({ delay }: { delay: number }) {
+  const value = useDotAnimation(delay);
+  const translateY = value.interpolate({ inputRange: [0, 1], outputRange: [0, -4] });
+
+  return (
+    <Animated.View
+      style={{
+        width: 6,
+        height: 6,
+        borderRadius: 3,
+        backgroundColor: '#9ca3af',
+        marginHorizontal: 2,
+        opacity: value.interpolate({ inputRange: [0, 1], outputRange: [0.4, 1] }),
+        transform: [{ translateY }],
+      }}
+    />
+  );
 }
 
 export function TypingIndicator() {
   return (
-    <View className="self-start bg-gray-100 rounded-2xl rounded-bl-md px-4 py-3.5 flex-row items-center">
+    <View className="flex-row items-center py-1">
       <Dot delay={0} />
       <Dot delay={150} />
       <Dot delay={300} />

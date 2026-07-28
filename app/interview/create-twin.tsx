@@ -5,7 +5,9 @@
  * automatic transition into Project Context -- no traditional form. All
  * orchestration (Coordinator, Interview Agent, field tracking, stage
  * transition, validation, save) lives in useInterview(); this screen only
- * renders state and forwards user input.
+ * renders state and forwards user input. Real Supabase persistence via
+ * ProfileTool/ProjectTool -- not the mock in-memory registry other
+ * placeholder screens use, since this flow already has a working backend.
  */
 
 import React, { useEffect, useRef, useState } from 'react';

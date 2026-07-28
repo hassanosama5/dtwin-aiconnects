@@ -6,6 +6,13 @@
  * useChat() -- no scripted responses, no fake timers. Conversation history
  * and every new answer/escalation are real, persisted rows loaded through
  * ConversationTool (see useChat.ts).
+ *
+ * UI polish carried over from the mock-data version: shared Loading/Error/
+ * Empty state components, a growing composer (1 to ~5 lines), and
+ * suggested-prompt chips on an empty conversation. The pipeline's live
+ * progress is shown via AgentExecution (Coordinator/Decision/Review +
+ * progress bar) rather than a second, separate "typing…" bubble -- the two
+ * would just be two indicators for the same wait.
  */
 
 import React, { useEffect, useRef, useState } from 'react';
@@ -15,19 +22,33 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
-  ActivityIndicator,
+  NativeSyntheticEvent,
+  TextInputContentSizeChangeEventData,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
+import { LoadingState } from '../../components/ui/LoadingState';
+import { ErrorState } from '../../components/ui/ErrorState';
+import { EmptyState } from '../../components/ui/EmptyState';
+import { SuggestionChips } from '../../components/ui/SuggestionChips';
 import { ChatBubble } from '../../components/chat/ChatBubble';
 import { ConfidenceBadge } from '../../components/chat/ConfidenceBadge';
 import { ReasoningCard } from '../../components/chat/ReasoningCard';
 import { AgentExecution } from '../../components/ui/AgentExecution';
 import { useChat } from '../../hooks/useChat';
 import { useAppStore, selectAgentExecution } from '../../store/appStore';
-import { theme } from '../../constants/theme';
+
+const SUGGESTED_PROMPTS = [
+  'What would you prioritize?',
+  'What risks do you see?',
+  'Should we delay launch?',
+  'How would you handle this?',
+];
+
+const MIN_COMPOSER_HEIGHT = 40;
+const MAX_COMPOSER_HEIGHT = 120; // ~5 lines
 
 export default function ChatScreen() {
   const { projectId } = useLocalSearchParams<{ projectId: string }>();
@@ -44,6 +65,7 @@ export default function ChatScreen() {
   const agentExecution = useAppStore(selectAgentExecution);
 
   const [inputText, setInputText] = useState('');
+  const [composerHeight, setComposerHeight] = useState(MIN_COMPOSER_HEIGHT);
   const scrollRef = useRef<ScrollView>(null);
 
   useEffect(() => {
@@ -52,17 +74,37 @@ export default function ChatScreen() {
 
   const twinFirstName = (twin?.name ?? 'the Decision Twin').split(' ')[0];
 
-  function handleSend() {
-    const trimmed = inputText.trim();
+  function handleSend(text?: string) {
+    const trimmed = (text ?? inputText).trim();
     if (!trimmed || isSending) return;
     sendMessage(trimmed);
     setInputText('');
+    setComposerHeight(MIN_COMPOSER_HEIGHT);
+  }
+
+  function handleComposerSizeChange(e: NativeSyntheticEvent<TextInputContentSizeChangeEventData>) {
+    const next = Math.min(
+      Math.max(MIN_COMPOSER_HEIGHT, e.nativeEvent.contentSize.height),
+      MAX_COMPOSER_HEIGHT
+    );
+    setComposerHeight(next);
   }
 
   if (isInitializing) {
     return (
-      <SafeAreaView className="flex-1 bg-white items-center justify-center">
-        <ActivityIndicator color={theme.colors.primary[600]} />
+      <SafeAreaView className="flex-1 bg-white">
+        <LoadingState message="Loading conversation..." />
+      </SafeAreaView>
+    );
+  }
+
+  // A failed project load (as opposed to a softer twin/history hiccup, which
+  // still surfaces via the inline banner below) leaves `project` null --
+  // nothing else on this screen is usable until that's retried.
+  if (!project && error) {
+    return (
+      <SafeAreaView className="flex-1 bg-white">
+        <ErrorState message={error} onRetry={retry} />
       </SafeAreaView>
     );
   }
@@ -73,7 +115,7 @@ export default function ChatScreen() {
         className="flex-1"
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        {/* Header */}
+        {/* Header — pinned, never scrolls */}
         <View className="px-6 py-4 border-b border-gray-200">
           <View className="flex-row items-baseline gap-1.5">
             <Text className="text-sm font-medium text-gray-500">Project:</Text>
@@ -88,13 +130,19 @@ export default function ChatScreen() {
         </View>
 
         {/* Conversation */}
-        <ScrollView ref={scrollRef} className="flex-1">
-          {messages.length === 0 && !isSending ? (
-            <View className="flex-1 items-center justify-center p-10">
-              <Text className="text-base text-gray-500 text-center">
-                Ask {twinFirstName} anything about this project.
-              </Text>
-            </View>
+        <ScrollView
+          ref={scrollRef}
+          className="flex-1"
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+        >
+          {messages.length === 0 ? (
+            <EmptyState
+              title="Start a conversation with your Decision Twin."
+              description={`Ask ${twinFirstName} anything about this project.`}
+            >
+              <SuggestionChips suggestions={SUGGESTED_PROMPTS} onSelect={setInputText} />
+            </EmptyState>
           ) : (
             <View className="p-6">
               {messages.map((message) => (
@@ -133,7 +181,7 @@ export default function ChatScreen() {
           </View>
         )}
 
-        {/* Input */}
+        {/* Input — grows from 1 to ~5 lines */}
         <View className="flex-row items-end gap-2 px-4 py-3 bg-white border-t border-gray-200">
           <View className="flex-1">
             <Input
@@ -141,12 +189,19 @@ export default function ChatScreen() {
               onChangeText={setInputText}
               placeholder="Ask a question..."
               fullWidth={false}
+              multiline
+              onContentSizeChange={handleComposerSizeChange}
+              style={{ height: composerHeight, textAlignVertical: 'top' }}
               editable={!isSending}
-              onSubmitEditing={handleSend}
-              returnKeyType="send"
             />
           </View>
-          <Button title="Send" onPress={handleSend} size="sm" disabled={isSending} />
+          <Button
+            title="Send"
+            onPress={() => handleSend()}
+            size="sm"
+            disabled={!inputText.trim()}
+            loading={isSending}
+          />
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
