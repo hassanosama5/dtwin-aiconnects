@@ -12,6 +12,11 @@
  * postProcess() already runs ValidationTool and saves via ProfileTool/
  * ProjectTool once each stage's fields are code-verified complete. This
  * hook only needs to react to `complete` and merge `extracted` each turn.
+ *
+ * Optionally seeded with an existing `twinId` + starting `stage` (see
+ * UseInterviewOptions) -- used by Create Project to add a project to an
+ * already-created twin, skipping the personal-profile stage entirely
+ * instead of running the whole two-stage flow again.
  */
 
 import { useCallback, useRef, useState } from 'react';
@@ -19,6 +24,15 @@ import { createAgentRegistry } from '../agents/AgentRegistry';
 import { InterviewMessage } from '../types/conversation';
 
 export type InterviewStage = 'personal' | 'project';
+
+export interface UseInterviewOptions {
+  /** Pre-seeds an existing twin so the first turn already has a twinId to
+   *  save against -- required when `stage` is 'project'. */
+  twinId?: string;
+  /** Defaults to 'personal' (new twin). Pass 'project' with `twinId` to add
+   *  a project to a twin that already exists. */
+  stage?: InterviewStage;
+}
 
 export interface UseInterviewResult {
   messages: InterviewMessage[];
@@ -49,12 +63,14 @@ function makeId(role: 'agent' | 'user'): string {
   return `${role}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
-export function useInterview(): UseInterviewResult {
+export function useInterview(options?: UseInterviewOptions): UseInterviewResult {
+  const initialStage = options?.stage ?? 'personal';
+
   const [messages, setMessages] = useState<InterviewMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isComplete, setIsComplete] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [stage, setStage] = useState<InterviewStage>('personal');
+  const [stage, setStage] = useState<InterviewStage>(initialStage);
   const [progress, setProgress] = useState<{ collected: number; total: number } | null>(null);
   const [suggestions, setSuggestions] = useState<string[]>([]);
 
@@ -65,8 +81,8 @@ export function useInterview(): UseInterviewResult {
   // know how many fields it's already asked about *in this stage*.
   const stageMessagesRef = useRef<InterviewMessage[]>([]);
   const collectedFieldsRef = useRef<Record<string, string | string[]>>({});
-  const twinIdRef = useRef<string | undefined>(undefined);
-  const stageRef = useRef<InterviewStage>('personal');
+  const twinIdRef = useRef<string | undefined>(options?.twinId);
+  const stageRef = useRef<InterviewStage>(initialStage);
   const hasStarted = useRef(false);
 
   const appendVisible = useCallback((message: InterviewMessage) => {

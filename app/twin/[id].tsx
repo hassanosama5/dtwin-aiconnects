@@ -1,21 +1,15 @@
 /**
  * Twin Profile Screen
  *
- * Displays a Decision Twin's profile: decision style, values,
- * communication style, and projects.
- *
- * Static UI only, placeholder data. Wiring to useTwins()/useTwin(id)
- * happens in Phase 3 (see ROADMAP.md).
- * Sprint 6: loading/empty/error states.
- * Sprint 7.1: header is now pinned above the scrolling content; unknown
- * ids fall back to the shared mockDirectory so newly-created twins (from
- * Create Twin) resolve to a real profile instead of "Twin not found."
+ * Displays a Decision Twin's real profile (personal_profile from Supabase)
+ * and their real projects. Wired to useTwin(id)/useProjects(id) -- replaces
+ * the mock/mockDirectory resolution that showed "Twin not found" for any
+ * real, Supabase-backed twin (the bug: Home already used useTwins() for the
+ * list, but this screen never queried Supabase for the single twin at all).
  */
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { View, Text, ScrollView } from 'react-native';
-// See app/index.tsx -- react-native's own SafeAreaView is deprecated and
-// collapses to zero height under the New Architecture on iOS.
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Button } from '../../components/ui/Button';
@@ -25,133 +19,31 @@ import { LoadingState } from '../../components/ui/LoadingState';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { ErrorState } from '../../components/ui/ErrorState';
 import { ProfileSectionCard, BulletList } from '../../components/cards/ProfileSectionCard';
-import { getCreatedTwin } from '../../utils/mockDirectory';
+import { useTwin } from '../../hooks/useTwin';
+import { useProjects } from '../../hooks/useProjects';
+import { Project } from '../../types/database';
 
-interface MockProject {
-  id: string;
-  name: string;
-  subtitle: string;
-}
-
-interface MockTwinProfile {
-  name: string;
-  role: string;
-  decisionStyle: string;
-  values: string[];
-  communicationStyle: string[];
-  projects: MockProject[];
-}
-
-// Placeholder data — replace with useTwins()/useTwin(id) in Phase 3.
-const MOCK_TWIN_PROFILES: Record<string, MockTwinProfile> = {
-  'hassan-osama': {
-    name: 'Hassan Osama',
-    role: 'Project Manager',
-    decisionStyle: 'Analytical, data-driven, prefers evidence before making decisions.',
-    values: ['Customer First', 'Long-term Thinking', 'Simplicity'],
-    communicationStyle: ['Direct', 'Concise', 'Structured'],
-    projects: [
-      { id: 'banking-app', name: 'Banking App', subtitle: 'Retail Banking' },
-      { id: 'payments-platform', name: 'Payments Platform', subtitle: 'Compliance' },
-      { id: 'mobile-wallet', name: 'Mobile Wallet', subtitle: 'Innovation' },
-    ],
-  },
-  'khaled-ashraf': {
-    name: 'Khaled Ashraf',
-    role: 'Team Lead',
-    decisionStyle: 'Collaborative, consensus-seeking, weighs team input before deciding.',
-    values: ['Team Ownership', 'Quality', 'Transparency'],
-    communicationStyle: ['Supportive', 'Clear', 'Open'],
-    projects: [
-      { id: 'ai-dashboard', name: 'AI Dashboard', subtitle: 'Internal Tooling' },
-      { id: 'support-portal', name: 'Support Portal', subtitle: 'Customer Success' },
-    ],
-  },
-  'mona-youssef': {
-    name: 'Mona Youssef',
-    role: 'Product Owner',
-    decisionStyle: 'Customer-driven, prioritizes impact and speed to market.',
-    values: ['User Value', 'Speed', 'Iteration'],
-    communicationStyle: ['Persuasive', 'Story-driven', 'Direct'],
-    projects: [
-      { id: 'loyalty-app', name: 'Loyalty App', subtitle: 'Growth' },
-      { id: 'checkout-redesign', name: 'Checkout Redesign', subtitle: 'Conversion' },
-      { id: 'referral-program', name: 'Referral Program', subtitle: 'Acquisition' },
-      { id: 'subscription-tiers', name: 'Subscription Tiers', subtitle: 'Retention' },
-    ],
-  },
-  'habiba-anwar': {
-    name: 'Habiba Anwar',
-    role: 'Project Manager',
-    decisionStyle: 'Pragmatic, balances user needs with delivery speed before committing to a plan.',
-    values: ['User Experience', 'Team Wellbeing', 'Clarity'],
-    communicationStyle: ['Empathetic', 'Clear', 'Collaborative'],
-    projects: [
-      { id: 'onboarding-flow', name: 'Onboarding Flow', subtitle: 'Activation' },
-      { id: 'design-system', name: 'Design System', subtitle: 'Consistency' },
-      { id: 'notifications-center', name: 'Notifications Center', subtitle: 'Engagement' },
-    ],
-  },
-  'omar-ahmed': {
-    name: 'Omar Ahmed',
-    role: 'Project Manager',
-    decisionStyle: 'Systematic, prioritizes reliability and long-term maintainability over quick wins.',
-    values: ['Reliability', 'Ownership', 'Pragmatism'],
-    communicationStyle: ['Precise', 'Documented', 'Direct'],
-    projects: [
-      { id: 'infra-migration', name: 'Infrastructure Migration', subtitle: 'Platform' },
-      { id: 'data-pipeline', name: 'Data Pipeline', subtitle: 'Analytics' },
-    ],
-  },
-};
-
-const LOAD_DELAY_MS = 500;
-
-// DEV ONLY — flip to true to preview the error state without a real backend.
-// Remove once useTwins()/useTwin(id) lands and this is driven by a real request.
-const SIMULATE_ERROR = false;
-
-type ViewStatus = 'loading' | 'success' | 'empty' | 'error';
-
-function ProjectCard({ project, onPress }: { project: MockProject; onPress: () => void }) {
+function ProjectCard({ project, onPress }: { project: Project; onPress: () => void }) {
   const [pressed, setPressed] = useState(false);
+  const subtitle = project.description || project.project_profile.goal;
 
   return (
     <PressableScale onPress={onPress} onPressedChange={setPressed}>
       <Card className="mb-3" elevated={!pressed}>
         <Text className="text-base font-semibold text-gray-900">{project.name}</Text>
-        <Text className="text-sm text-gray-600 mt-0.5">{project.subtitle}</Text>
+        <Text className="text-sm text-gray-600 mt-0.5">{subtitle}</Text>
       </Card>
     </PressableScale>
   );
 }
 
-function resolveTwin(id: string | undefined): MockTwinProfile | undefined {
-  if (!id) return undefined;
-  return MOCK_TWIN_PROFILES[id] ?? getCreatedTwin(id);
-}
-
 export default function TwinProfileScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const [status, setStatus] = useState<ViewStatus>('loading');
+  const { twin, isLoading: isTwinLoading, error: twinError, refresh: refreshTwin } = useTwin(id);
+  const { projects, isLoading: isProjectsLoading, error: projectsError } = useProjects(id);
 
-  // TODO: Phase 3 — replace with useTwins()/useTwin(id) once the hook exists.
-  const twin = resolveTwin(id);
-
-  const load = useCallback(() => {
-    setStatus('loading');
-    const timeout = setTimeout(() => {
-      if (SIMULATE_ERROR) setStatus('error');
-      else if (!twin) setStatus('empty');
-      else setStatus('success');
-    }, LOAD_DELAY_MS);
-    return () => clearTimeout(timeout);
-  }, [twin]);
-
-  useEffect(() => load(), [load]);
-
-  if (status === 'loading') {
+  if (isTwinLoading) {
     return (
       <SafeAreaView className="flex-1 bg-white">
         <LoadingState message="Loading Twin..." />
@@ -159,21 +51,23 @@ export default function TwinProfileScreen() {
     );
   }
 
-  if (status === 'error') {
+  if (twinError) {
     return (
       <SafeAreaView className="flex-1 bg-white">
-        <ErrorState message="Unable to load profile." onRetry={load} />
+        <ErrorState message={twinError} onRetry={refreshTwin} />
       </SafeAreaView>
     );
   }
 
-  if (status === 'empty' || !twin) {
+  if (!twin) {
     return (
       <SafeAreaView className="flex-1 bg-white">
         <EmptyState title="Twin not found." />
       </SafeAreaView>
     );
   }
+
+  const profile = twin.personal_profile;
 
   return (
     <SafeAreaView className="flex-1 bg-white">
@@ -186,27 +80,35 @@ export default function TwinProfileScreen() {
       <ScrollView className="flex-1">
         <View className="px-6 pb-6">
           <ProfileSectionCard title="Decision Style">
-            <Text className="text-sm text-gray-600 leading-5">{twin.decisionStyle}</Text>
+            <Text className="text-sm text-gray-600 leading-5">{profile.decisionStyle}</Text>
           </ProfileSectionCard>
 
           <ProfileSectionCard title="Core Values">
-            <BulletList items={twin.values} />
+            <BulletList items={profile.values} />
           </ProfileSectionCard>
 
           <ProfileSectionCard title="Communication Style">
-            <BulletList items={twin.communicationStyle} />
+            <Text className="text-sm text-gray-600 leading-5">{profile.communicationStyle}</Text>
           </ProfileSectionCard>
 
           {/* Projects — flat list of cards, not nested in another Card */}
           <View>
             <Text className="text-base font-semibold text-gray-900 mb-3">Projects</Text>
-            {twin.projects.map((project) => (
-              <ProjectCard
-                key={project.id}
-                project={project}
-                onPress={() => router.push(`/project/${project.id}`)}
-              />
-            ))}
+            {isProjectsLoading ? (
+              <Text className="text-sm text-gray-500">Loading projects...</Text>
+            ) : projectsError ? (
+              <Text className="text-sm text-red-500">{projectsError}</Text>
+            ) : projects.length === 0 ? (
+              <Text className="text-sm text-gray-500">No projects yet.</Text>
+            ) : (
+              projects.map((project) => (
+                <ProjectCard
+                  key={project.id}
+                  project={project}
+                  onPress={() => router.push(`/project/${project.id}`)}
+                />
+              ))
+            )}
           </View>
         </View>
       </ScrollView>

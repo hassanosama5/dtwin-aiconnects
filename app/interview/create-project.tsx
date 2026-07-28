@@ -1,101 +1,158 @@
 /**
  * Create Project Screen
  *
- * Project interview flow — scripted mock conversation only.
- * Wiring to the real Interview Agent / useInterview() happens in Phase 3.
+ * Adds a new project to an existing Decision Twin -- a conversational,
+ * code-driven Project Context interview via useInterview({ twinId, stage:
+ * 'project' }), which skips the personal-profile stage entirely since the
+ * twin already exists. Real Supabase persistence via ProjectTool -- this
+ * screen previously used the fully scripted InterviewChat mock and never
+ * called any backend at all, which was the root cause of "nothing persists"
+ * (confirmed by inspection: no twinId was even read from route params).
+ *
+ * If this twin already has a project, skips straight to their Twin Profile
+ * (where the real project list now lives) instead of restarting creation.
  */
 
-import React from 'react';
-import { View, Text } from 'react-native';
-// See app/index.tsx -- react-native's own SafeAreaView is deprecated and
-// collapses to zero height under the New Architecture on iOS.
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
+  TouchableOpacity,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
-import { InterviewChat, InterviewQuestion } from '../../components/shared/InterviewChat';
-import { ProfileSectionCard, BulletList } from '../../components/cards/ProfileSectionCard';
-
-// Placeholder script — replace with the real Interview Agent conversation in Phase 3.
-const QUESTIONS: InterviewQuestion[] = [
-  { text: "Let's learn about your project. What's the project name?" },
-  {
-    text: 'What is the goal of this project?',
-    suggestions: ['Ship on time', 'Increase revenue', 'Improve retention', 'Reduce costs'],
-  },
-  {
-    text: 'What are the main priorities?',
-    suggestions: ['Security', 'Performance', 'User experience', 'Compliance'],
-  },
-  {
-    text: 'What constraints should the Decision Twin be aware of?',
-    suggestions: ['Fixed deadline', 'Limited budget', 'Small team', 'Legacy system'],
-  },
-  {
-    text: 'What decision rules should guide trade-offs?',
-    suggestions: ['Prioritize security', 'Never miss deadlines', 'User impact first'],
-  },
-  {
-    text: 'When should this be escalated to you directly?',
-    suggestions: ['Budget changes', 'Timeline changes', 'Scope changes', 'Security issues'],
-  },
-];
-
-const LOADING_LINES = ['Reviewing project details...', 'Building your Project Profile...'];
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { useInterview } from '../../hooks/useInterview';
+import { useProjects } from '../../hooks/useProjects';
+import { MessageBubble } from '../../components/chat/MessageBubble';
+import { TypingIndicator } from '../../components/chat/TypingIndicator';
+import { ProgressBar } from '../../components/chat/ProgressBar';
+import { SuggestionChips } from '../../components/chat/SuggestionChips';
+import { LoadingState } from '../../components/ui/LoadingState';
+import { theme } from '../../constants/theme';
 
 export default function CreateProjectScreen() {
+  const { twinId } = useLocalSearchParams<{ twinId: string }>();
   const router = useRouter();
+  const { projects, isLoading: isCheckingExisting } = useProjects(twinId);
+  const { messages, isLoading, isComplete, error, progress, suggestions, start, sendMessage } =
+    useInterview({ twinId, stage: 'project' });
+  const [draft, setDraft] = useState('');
+  const scrollRef = useRef<ScrollView>(null);
+
+  const hasExistingProject = !isCheckingExisting && projects.length > 0;
+
+  useEffect(() => {
+    if (isCheckingExisting || hasExistingProject || !twinId) return;
+    start();
+  }, [isCheckingExisting, hasExistingProject, twinId, start]);
+
+  useEffect(() => {
+    if (hasExistingProject) {
+      router.replace(`/twin/${twinId}`);
+    }
+  }, [hasExistingProject, router, twinId]);
+
+  useEffect(() => {
+    scrollRef.current?.scrollToEnd({ animated: true });
+  }, [messages, isLoading, suggestions]);
+
+  useEffect(() => {
+    if (!isComplete) return;
+    const timeout = setTimeout(() => router.back(), 1100);
+    return () => clearTimeout(timeout);
+  }, [isComplete, router]);
+
+  const handleSend = (content: string) => {
+    if (!content.trim()) return;
+    sendMessage(content);
+    setDraft('');
+  };
+
+  if (isCheckingExisting || hasExistingProject) {
+    return (
+      <SafeAreaView className="flex-1 bg-white">
+        <LoadingState message="Loading project..." />
+      </SafeAreaView>
+    );
+  }
+
+  if (isComplete) {
+    return (
+      <SafeAreaView className="flex-1 bg-white items-center justify-center px-8">
+        <Text className="text-lg font-semibold text-gray-900 mb-2">
+          Creating your Project…
+        </Text>
+        <Text className="text-sm text-gray-500 text-center">Saving what you've shared.</Text>
+      </SafeAreaView>
+    );
+  }
+
+  const canSend = draft.trim().length > 0 && !isLoading;
 
   return (
-    <SafeAreaView className="flex-1 bg-white">
-      <InterviewChat
-        questions={QUESTIONS}
-        loadingTitle="Generating Project Profile..."
-        loadingLines={LOADING_LINES}
-        successMessage="Project Profile Generated"
-        onDone={() => router.back()}
-        summary={(answers) => (
-          <>
-            <View className="mb-6">
-              <Text className="text-3xl font-bold text-gray-900 mb-1">
-                {answers[0]?.trim() || 'Banking App'}
-              </Text>
-              <Text className="text-base text-gray-600">Project Profile</Text>
-            </View>
+    <KeyboardAvoidingView
+      className="flex-1 bg-white"
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+    >
+      <SafeAreaView className="flex-1">
+        <View className="border-b border-gray-100">
+          {progress && (
+            <ProgressBar label="Project Context" collected={progress.collected} total={progress.total} />
+          )}
+          <View className="px-6 pt-1 pb-3">
+            <Text className="text-sm text-gray-500">Let's set the context for this project.</Text>
+          </View>
+        </View>
 
-            <ProfileSectionCard title="Goal">
-              <Text className="text-sm text-gray-600 leading-5">
-                Ship the MVP on time while keeping the app secure and reliable for early banking
-                customers.
-              </Text>
-            </ProfileSectionCard>
+        <ScrollView
+          ref={scrollRef}
+          className="flex-1 px-5"
+          contentContainerStyle={{ paddingVertical: 16, gap: 12 }}
+          keyboardShouldPersistTaps="handled"
+        >
+          {messages.map((message) => (
+            <MessageBubble key={message.id} role={message.role} content={message.content} />
+          ))}
+          {isLoading && <TypingIndicator />}
+        </ScrollView>
 
-            <ProfileSectionCard title="Priorities">
-              <BulletList items={['Security', 'Performance', 'Regulatory compliance']} />
-            </ProfileSectionCard>
-
-            <ProfileSectionCard title="Constraints">
-              <BulletList items={['Fixed launch deadline', 'Limited QA headcount']} />
-            </ProfileSectionCard>
-
-            <ProfileSectionCard title="Decision Rules">
-              <BulletList
-                items={[
-                  'Delay the release only for security issues.',
-                  'Feature requests that risk the deadline are deferred to the next sprint.',
-                ]}
-              />
-            </ProfileSectionCard>
-
-            <ProfileSectionCard title="Escalation Rules" className="mb-0">
-              <BulletList
-                items={[
-                  'Budget changes require direct approval.',
-                  'Any change to the compliance scope must be escalated.',
-                ]}
-              />
-            </ProfileSectionCard>
-          </>
+        {error && (
+          <View className="px-5 pb-2">
+            <Text className="text-sm text-red-500">{error}</Text>
+          </View>
         )}
-      />
-    </SafeAreaView>
+
+        {!isLoading && (
+          <SuggestionChips suggestions={suggestions} onSelect={handleSend} disabled={isLoading} />
+        )}
+
+        <View className="flex-row items-end px-4 py-3 border-t border-gray-100 gap-2">
+          <TextInput
+            value={draft}
+            onChangeText={setDraft}
+            placeholder="Type your answer..."
+            placeholderTextColor={theme.colors.gray[400]}
+            multiline
+            editable={!isLoading}
+            className="flex-1 bg-gray-100 rounded-2xl px-4 py-3 text-base text-gray-900 max-h-28"
+          />
+          <TouchableOpacity
+            onPress={() => handleSend(draft)}
+            disabled={!canSend}
+            className={`w-11 h-11 rounded-full items-center justify-center ${
+              canSend ? 'bg-primary-600' : 'bg-gray-200'
+            }`}
+          >
+            <Ionicons name="arrow-up" size={20} color={canSend ? '#ffffff' : theme.colors.gray[400]} />
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    </KeyboardAvoidingView>
   );
 }
