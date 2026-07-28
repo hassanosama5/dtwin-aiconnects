@@ -1,11 +1,10 @@
 /**
  * Project Screen
  *
- * Displays a project's profile: goal, priorities, constraints, decision
- * rules, and escalation rules, with a primary CTA into Chat.
- *
- * Static UI only, placeholder data. Wiring to useProjects()/useProject(id)
- * happens in Phase 3 (see ROADMAP.md).
+ * Displays a project's real profile (project_profile from Supabase): goal,
+ * priorities, constraints, decision rules, escalation rules, with a primary
+ * CTA into Chat. Wired to useProject(id) -- replaces the MOCK_PROJECTS/
+ * mockDirectory resolution.
  */
 
 import React from 'react';
@@ -13,65 +12,75 @@ import { View, Text, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Button } from '../../components/ui/Button';
+import { LoadingState } from '../../components/ui/LoadingState';
+import { EmptyState } from '../../components/ui/EmptyState';
+import { ErrorState } from '../../components/ui/ErrorState';
 import { ProfileSectionCard, BulletList } from '../../components/cards/ProfileSectionCard';
-import { ProjectProfile } from '../../types/profile';
-
-// Placeholder data — replace with useProjects()/useProject(id) in Phase 3.
-const MOCK_PROJECT: ProjectProfile & { twinName: string } = {
-  name: 'Banking App',
-  twinName: 'Hassan Osama',
-  goal: 'Ship the MVP on time while keeping the app secure and reliable for early banking customers.',
-  priorities: ['Security', 'Performance', 'Regulatory compliance'],
-  constraints: ['Fixed launch deadline', 'Limited QA headcount'],
-  decisionRules: [
-    'Delay the release only for security issues.',
-    'Feature requests that risk the deadline are deferred to the next sprint.',
-  ],
-  escalationRules: [
-    'Budget changes require direct approval.',
-    'Any change to the compliance scope must be escalated.',
-  ],
-};
+import { useProject } from '../../hooks/useProject';
+import { useTwin } from '../../hooks/useTwin';
 
 export default function ProjectScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const { project, isLoading, error, refresh } = useProject(id);
+  const { twin } = useTwin(project?.twin_id);
 
-  // TODO: Phase 3 — replace with useProjects()/useProject(id) once the hook exists.
-  const project = MOCK_PROJECT;
+  if (isLoading) {
+    return (
+      <SafeAreaView className="flex-1 bg-gray-50">
+        <LoadingState message="Loading Project..." />
+      </SafeAreaView>
+    );
+  }
+
+  if (error) {
+    return (
+      <SafeAreaView className="flex-1 bg-gray-50">
+        <ErrorState message={error} onRetry={refresh} />
+      </SafeAreaView>
+    );
+  }
+
+  if (!project) {
+    return (
+      <SafeAreaView className="flex-1 bg-gray-50">
+        <EmptyState title="Project not found." />
+      </SafeAreaView>
+    );
+  }
+
+  const profile = project.project_profile;
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
-      <ScrollView className="flex-1">
-        <View className="p-6">
-          {/* Header */}
-          <View className="mb-6">
-            <Text className="text-3xl font-bold text-gray-900 mb-1">
-              {project.name}
-            </Text>
-            <Text className="text-base text-gray-600">
-              {project.twinName}&apos;s project
-            </Text>
-          </View>
+      {/* Pinned header — never scrolls away */}
+      <View className="px-6 pt-6 pb-4">
+        <Text className="text-3xl font-bold text-gray-900 mb-1">{project.name}</Text>
+        <Text className="text-base text-gray-600">
+          {twin ? `${twin.name}'s project` : 'Project'}
+        </Text>
+      </View>
 
+      <ScrollView className="flex-1">
+        <View className="px-6 pb-6">
           <ProfileSectionCard title="Goal">
-            <Text className="text-sm text-gray-600 leading-5">{project.goal}</Text>
+            <Text className="text-sm text-gray-600 leading-5">{profile.goal}</Text>
           </ProfileSectionCard>
 
           <ProfileSectionCard title="Priorities">
-            <BulletList items={project.priorities} />
+            <BulletList items={profile.priorities} />
           </ProfileSectionCard>
 
           <ProfileSectionCard title="Constraints">
-            <BulletList items={project.constraints} />
+            <BulletList items={profile.constraints} />
           </ProfileSectionCard>
 
           <ProfileSectionCard title="Decision Rules">
-            <BulletList items={project.decisionRules} />
+            <BulletList items={profile.decisionRules} />
           </ProfileSectionCard>
 
           <ProfileSectionCard title="Escalation Rules" className="mb-0">
-            <BulletList items={project.escalationRules} />
+            <BulletList items={profile.escalationRules} />
           </ProfileSectionCard>
         </View>
       </ScrollView>

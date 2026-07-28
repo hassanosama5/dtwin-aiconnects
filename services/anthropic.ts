@@ -1,19 +1,21 @@
 /**
  * LLM Service
  *
- * Uses the LiteLLM OpenAI-compatible endpoint by default, with Anthropic SDK
- * as a fallback for backwards compatibility.
+ * Wrapper around the iHQ LiteLLM proxy (OpenAI-compatible endpoint in front
+ * of Claude) using the `openai` SDK pointed at LiteLLM's base URL.
+ * Supports structured outputs with Zod validation and automatic retries.
  */
 
-import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 import { z } from 'zod';
 import { env } from '../config/env';
 import { logger } from '../utils/logger';
 import { validateAgentResponse } from '../utils/validation';
 
-const anthropic = env.anthropic.apiKey
-  ? new Anthropic({
-      apiKey: env.anthropic.apiKey,
+const openai = env.llm.apiKey || env.litellm.apiKey
+  ? new OpenAI({
+      apiKey: env.llm.apiKey || env.litellm.apiKey,
+      baseURL: env.llm.baseURL || env.litellm.baseUrl,
     })
   : null;
 
@@ -40,21 +42,23 @@ export interface ChatResponse<T = unknown> {
   };
 }
 
-export async function chat<T = unknown>(
-  config: ChatRequest<T>
-): Promise<ChatResponse<T>> {
+export async function chat<T = unknown>(config: ChatRequest<T>): Promise<ChatResponse<T>> {
   const {
     systemPrompt,
     messages,
     schema,
     maxRetries = 1,
-    temperature = env.anthropic.temperature,
-    maxTokens = env.anthropic.maxTokens,
+    temperature = env.llm.temperature,
+    maxTokens = env.llm.maxTokens,
   } = config;
 
   const endTimer = logger.time('LLM API call');
 
   try {
+    if (!openai) {
+      throw new Error('No LLM provider is configured. Set EXPO_PUBLIC_LITELLM_API_KEY to enable live responses.');
+    }
+
     const enhancedMessages = schema
       ? [
           ...messages,
@@ -65,49 +69,19 @@ export async function chat<T = unknown>(
         ]
       : messages;
 
-    if (env.litellm.apiKey) {
-      const response = await callLiteLlm({
-        systemPrompt,
-        messages: enhancedMessages,
-        temperature,
-        maxTokens,
-      });
-
-      endTimer();
-
-      if (schema) {
-        const parsed = await parseAndValidate(response.content, schema, maxRetries);
-        return {
-          content: response.content,
-          parsed,
-          usage: response.usage,
-        };
-      }
-
-      return response as ChatResponse<T>;
-    }
-
-    if (!anthropic) {
-      throw new Error('No LLM provider is configured. Set EXPO_PUBLIC_LITELLM_API_KEY or EXPO_PUBLIC_ANTHROPIC_API_KEY to enable live responses.');
-    }
-
-    const response = await anthropic.messages.create({
-      model: env.anthropic.model,
+    const response = await openai.chat.completions.create({
+      model: env.llm.model,
       max_tokens: maxTokens,
       temperature,
-      system: systemPrompt,
-      messages: enhancedMessages,
+      messages: [{ role: 'system', content: systemPrompt }, ...enhancedMessages],
     });
 
     endTimer();
 
-    const textContent = response.content
-      .filter((block) => block.type === 'text')
-      .map((block) => (block as any).text)
-      .join('');
+    const textContent = extractContent(response.choices[0]?.message?.content);
 
-    logger.info('Claude response received', {
-      model: env.anthropic.model,
+    logger.info('LLM response received', {
+      model: env.llm.model,
       tokens: response.usage,
     });
 
@@ -117,8 +91,8 @@ export async function chat<T = unknown>(
         content: textContent,
         parsed,
         usage: {
-          inputTokens: response.usage.input_tokens,
-          outputTokens: response.usage.output_tokens,
+          inputTokens: response.usage?.prompt_tokens ?? 0,
+          outputTokens: response.usage?.completion_tokens ?? 0,
         },
       };
     }
@@ -126,80 +100,24 @@ export async function chat<T = unknown>(
     return {
       content: textContent,
       usage: {
-        inputTokens: response.usage.input_tokens,
-        outputTokens: response.usage.output_tokens,
+        inputTokens: response.usage?.prompt_tokens ?? 0,
+        outputTokens: response.usage?.completion_tokens ?? 0,
       },
     };
   } catch (error) {
     endTimer();
     logger.error('LLM API call failed', error);
-    throw new Error(`LLM API error: ${error}`);
+    throw new Error(`LiteLLM API error: ${error}`);
   }
 }
 
-async function callLiteLlm(config: {
-  systemPrompt: string;
-  messages: ClaudeMessage[];
-  temperature: number;
-  maxTokens: number;
-}): Promise<ChatResponse> {
-  const { systemPrompt, messages, temperature, maxTokens } = config;
-  const payload = {
-    model: env.litellm.model,
-    temperature,
-    max_tokens: maxTokens,
-    messages: [
-      { role: 'system', content: systemPrompt },
-      ...messages.map((message) => ({ role: message.role, content: message.content })),
-    ],
-  };
-
-  const response = await fetch(`${env.litellm.baseUrl}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${env.litellm.apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(payload),
-  });
-
-  if (!response.ok) {
-    const errorBody = await response.text();
-    throw new Error(`LiteLLM API error: ${response.status} ${errorBody}`);
-  }
-
-  const data = (await response.json()) as {
-    choices?: Array<{
-      message?: {
-        content?: string | Array<{ type?: string; text?: string }>;
-      };
-    }>;
-    usage?: {
-      prompt_tokens?: number;
-      completion_tokens?: number;
-    };
-  };
-
-  const content = extractContent(data.choices?.[0]?.message?.content);
-
-  return {
-    content,
-    usage: {
-      inputTokens: data.usage?.prompt_tokens ?? 0,
-      outputTokens: data.usage?.completion_tokens ?? 0,
-    },
-  };
-}
-
-function extractContent(content: string | Array<{ type?: string; text?: string }> | undefined): string {
+function extractContent(content: string | Array<{ type?: string; text?: string }> | null | undefined): string {
   if (typeof content === 'string') {
     return content;
   }
 
   if (Array.isArray(content)) {
-    return content
-      .map((part) => part.text ?? '')
-      .join('');
+    return content.map((part) => part.text ?? '').join('');
   }
 
   return '';
@@ -220,7 +138,6 @@ async function parseAndValidate<T>(
 
       const jsonString = jsonMatch[1] || content;
       const parsed = JSON.parse(jsonString.trim());
-
       const result = validateAgentResponse(schema, parsed, 'LLM');
 
       if (result.success) {
@@ -248,107 +165,39 @@ export async function* chatStream(
   const {
     systemPrompt,
     messages,
-    temperature = env.anthropic.temperature,
-    maxTokens = env.anthropic.maxTokens,
+    temperature = env.llm.temperature,
+    maxTokens = env.llm.maxTokens,
   } = config;
 
   try {
-    if (env.litellm.apiKey) {
-      const response = await fetch(`${env.litellm.baseUrl}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${env.litellm.apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: env.litellm.model,
-          temperature,
-          max_tokens: maxTokens,
-          stream: true,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            ...messages.map((message) => ({ role: message.role, content: message.content })),
-          ],
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`LiteLLM streaming error: ${response.status}`);
-      }
-
-      const reader = response.body?.getReader();
-      if (!reader) {
-        throw new Error('Streaming response was not available.');
-      }
-
-      const decoder = new TextDecoder();
-      let buffer = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) {
-          break;
-        }
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() ?? '';
-
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed || trimmed === 'data: [DONE]') {
-            continue;
-          }
-
-          if (trimmed.startsWith('data: ')) {
-            const payload = trimmed.slice(6);
-            try {
-              const json = JSON.parse(payload);
-              const delta = json.choices?.[0]?.delta?.content;
-              if (typeof delta === 'string') {
-                yield delta;
-              }
-            } catch {
-              // Ignore incomplete stream chunks.
-            }
-          }
-        }
-      }
-
-      return;
+    if (!openai) {
+      throw new Error('No LLM provider is configured. Set EXPO_PUBLIC_LITELLM_API_KEY to enable streaming.');
     }
 
-    if (!anthropic) {
-      throw new Error('No LLM provider is configured. Set EXPO_PUBLIC_LITELLM_API_KEY or EXPO_PUBLIC_ANTHROPIC_API_KEY to enable streaming.');
-    }
-
-    const stream = await anthropic.messages.create({
-      model: env.anthropic.model,
+    const stream = await openai.chat.completions.create({
+      model: env.llm.model,
       max_tokens: maxTokens,
       temperature,
-      system: systemPrompt,
-      messages,
+      messages: [{ role: 'system', content: systemPrompt }, ...messages],
       stream: true,
     });
 
-    for await (const event of stream) {
-      if (
-        event.type === 'content_block_delta' &&
-        event.delta.type === 'text_delta'
-      ) {
-        yield event.delta.text;
+    for await (const chunk of stream) {
+      const delta = chunk.choices[0]?.delta?.content;
+      if (delta) {
+        yield delta;
       }
     }
   } catch (error) {
     logger.error('LLM streaming failed', error);
-    throw new Error(`LLM streaming error: ${error}`);
+    throw new Error(`LiteLLM streaming error: ${error}`);
   }
 }
 
 export function getModelConfig() {
   return {
-    model: env.litellm.apiKey ? env.litellm.model : env.anthropic.model,
-    maxTokens: env.anthropic.maxTokens,
-    temperature: env.anthropic.temperature,
+    model: env.llm.model,
+    maxTokens: env.llm.maxTokens,
+    temperature: env.llm.temperature,
   };
 }

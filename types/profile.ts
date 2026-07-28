@@ -31,6 +31,8 @@ export interface ProjectProfile {
   escalationRules: string[];
   tradeoffs?: string[];
   currentChallenges?: string[];
+  stakeholders?: string[];
+  successMetrics?: string[];
 }
 
 // Helper types

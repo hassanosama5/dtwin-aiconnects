@@ -49,6 +49,14 @@ export default function RootLayout() {
           options={{
             title: 'Create Decision Twin',
             presentation: 'modal',
+            // Explicitly off: without this, native-stack's large-title mode
+            // tries to bind to the screen's ScrollView for scroll-driven
+            // collapse, but that ScrollView is nested inside
+            // KeyboardAvoidingView + SafeAreaView, not a direct child --
+            // breaking the binding and causing an immediate, un-scroll-driven
+            // collapse. Modal/sheet screens shouldn't use large titles per
+            // iOS HIG anyway (reserved for root browsing screens like Home).
+            headerLargeTitle: false,
           }}
         />
         <Stack.Screen

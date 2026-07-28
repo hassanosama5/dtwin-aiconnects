@@ -32,6 +32,8 @@ export const ProjectProfileSchema = z.object({
   escalationRules: z.array(z.string()).min(1, 'At least one escalation rule is required'),
   tradeoffs: z.array(z.string()).optional(),
   currentChallenges: z.array(z.string()).optional(),
+  stakeholders: z.array(z.string()).optional(),
+  successMetrics: z.array(z.string()).optional(),
 });
 
 // Coordinator Response Schema
@@ -39,12 +41,28 @@ export const CoordinatorResponseSchema = z.object({
   workflow: z.enum(['CREATE_TWIN', 'CREATE_PROJECT', 'CHAT', 'UPDATE_PROFILE']),
 });
 
-// Interview Response Schema
-export const InterviewResponseSchema = z.object({
-  complete: z.boolean(),
-  nextQuestion: z.string().optional(),
-  profile: z.union([PersonProfileSchema, ProjectProfileSchema]).optional(),
-  missingFields: z.array(z.string()).optional(),
+// Interview Turn Schema
+//
+// Validates the LLM's RAW per-turn output inside InterviewAgent -- not the
+// final InterviewResponse returned to callers. Deliberately permissive
+// (an empty `extracted` object is valid) because each turn only asks the
+// model to extract whatever the latest answer provided and propose the next
+// question; it never asks the model to reproduce a whole, complete profile
+// in one shot. Completion is determined by code from accumulated,
+// individually-validated fields -- see agents/interview.ts and DECISIONS.md.
+//
+// `extracted`'s values are deliberately unvalidated (z.any()): observed
+// live, the model sometimes invents extra keys for adjacent context it
+// noticed (e.g. "teamSize") with arbitrary JSON types (a number, here).
+// Those invented keys get discarded in agents/interview.ts anyway (only
+// known field keys are kept), so validating their shape here just fails
+// the whole turn over data we were never going to use. Coercing whatever
+// comes through into string/string[] is code's job, not Zod's -- see
+// agents/interview.ts's `coerce()`.
+export const InterviewTurnSchema = z.object({
+  extracted: z.record(z.any()),
+  nextQuestion: z.string().nullable().optional(),
+  suggestions: z.array(z.string()).optional(),
 });
 
 // Decision Response Schema
