@@ -1,17 +1,8 @@
 /**
- * Anthropic Service
+ * LLM Service
  *
- * Wrapper around Claude API calls. Transport: the OpenAI-compatible client
- * pointed at the course's LiteLLM proxy (see the professor's migration
- * spec) -- LiteLLM routes `anthropic/claude-haiku-4-5` to real Claude, but
- * only documents an OpenAI-compatible endpoint, so the `openai` SDK talks
- * to it directly instead of assuming an undocumented Anthropic-format route.
- *
- * Every exported name/signature below (chat, chatStream, getModelConfig,
- * ClaudeMessage, ChatRequest, ChatResponse) is unchanged from the direct-
- * Anthropic-SDK version -- only the transport internals moved, so no other
- * file in the codebase needed to change.
- *
+ * Wrapper around the iHQ LiteLLM proxy (OpenAI-compatible endpoint in front
+ * of Claude) using the `openai` SDK pointed at LiteLLM's base URL.
  * Supports structured outputs with Zod validation and automatic retries.
  */
 
@@ -21,16 +12,10 @@ import { env } from '../config/env';
 import { logger } from '../utils/logger';
 import { validateAgentResponse } from '../utils/validation';
 
-// Initialize the OpenAI-compatible client against the LiteLLM proxy.
-// dangerouslyAllowBrowser: this app already ships EXPO_PUBLIC_* keys in the
-// client bundle (a pre-existing, already-accepted decision for this
-// hackathon MVP, not something introduced by this migration) -- the flag
-// only matters on the project's separate (already non-functional) web
-// target, since React Native itself has no `window.document` to trigger it.
+// Initialize OpenAI-compatible client, pointed at the LiteLLM proxy
 const openai = new OpenAI({
-  apiKey: env.anthropic.apiKey,
-  baseURL: env.anthropic.baseURL,
-  dangerouslyAllowBrowser: true,
+  apiKey: env.llm.apiKey,
+  baseURL: env.llm.baseURL,
 });
 
 // Message type
@@ -60,7 +45,7 @@ export interface ChatResponse<T = unknown> {
 }
 
 /**
- * Make a chat completion request to Claude (via the LiteLLM proxy)
+ * Make a chat completion request to Claude via the LiteLLM proxy
  *
  * @param config - Chat configuration
  * @returns Parsed and validated response
@@ -73,11 +58,11 @@ export async function chat<T = unknown>(
     messages,
     schema,
     maxRetries = 1,
-    temperature = env.anthropic.temperature,
-    maxTokens = env.anthropic.maxTokens,
+    temperature = env.llm.temperature,
+    maxTokens = env.llm.maxTokens,
   } = config;
 
-  const endTimer = logger.time('Claude API call');
+  const endTimer = logger.time('LLM API call');
 
   try {
     // Add JSON instruction if schema is provided
@@ -91,10 +76,9 @@ export async function chat<T = unknown>(
         ]
       : messages;
 
-    // OpenAI Chat Completions has no separate top-level `system` param --
-    // the system prompt is just the first message, with role 'system'.
+    // Make API call (OpenAI-compatible chat completions)
     const response = await openai.chat.completions.create({
-      model: env.anthropic.model,
+      model: env.llm.model,
       max_tokens: maxTokens,
       temperature,
       messages: [{ role: 'system', content: systemPrompt }, ...enhancedMessages],
@@ -102,10 +86,11 @@ export async function chat<T = unknown>(
 
     endTimer();
 
+    // Extract text content
     const textContent = response.choices[0]?.message?.content ?? '';
 
-    logger.info('Claude response received', {
-      model: env.anthropic.model,
+    logger.info('LLM response received', {
+      model: env.llm.model,
       tokens: response.usage,
     });
 
@@ -132,8 +117,8 @@ export async function chat<T = unknown>(
     };
   } catch (error) {
     endTimer();
-    logger.error('Claude API call failed', error);
-    throw new Error(`Anthropic API error: ${error}`);
+    logger.error('LLM API call failed', error);
+    throw new Error(`LiteLLM API error: ${error}`);
   }
 }
 
@@ -158,7 +143,7 @@ async function parseAndValidate<T>(
       const parsed = JSON.parse(jsonString.trim());
 
       // Validate with schema
-      const result = validateAgentResponse(schema, parsed, 'Claude');
+      const result = validateAgentResponse(schema, parsed, 'LLM');
 
       if (result.success) {
         return result.data;
@@ -194,13 +179,13 @@ export async function* chatStream(
   const {
     systemPrompt,
     messages,
-    temperature = env.anthropic.temperature,
-    maxTokens = env.anthropic.maxTokens,
+    temperature = env.llm.temperature,
+    maxTokens = env.llm.maxTokens,
   } = config;
 
   try {
     const stream = await openai.chat.completions.create({
-      model: env.anthropic.model,
+      model: env.llm.model,
       max_tokens: maxTokens,
       temperature,
       messages: [{ role: 'system', content: systemPrompt }, ...messages],
@@ -214,8 +199,8 @@ export async function* chatStream(
       }
     }
   } catch (error) {
-    logger.error('Claude streaming failed', error);
-    throw new Error(`Anthropic streaming error: ${error}`);
+    logger.error('LLM streaming failed', error);
+    throw new Error(`LiteLLM streaming error: ${error}`);
   }
 }
 
@@ -224,8 +209,8 @@ export async function* chatStream(
  */
 export function getModelConfig() {
   return {
-    model: env.anthropic.model,
-    maxTokens: env.anthropic.maxTokens,
-    temperature: env.anthropic.temperature,
+    model: env.llm.model,
+    maxTokens: env.llm.maxTokens,
+    temperature: env.llm.temperature,
   };
 }

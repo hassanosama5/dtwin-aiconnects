@@ -17,20 +17,22 @@ const getEnvVar = (key: string): string => {
   return value;
 };
 
-const getOptionalEnvVar = (key: string, defaultValue: string = ''): string => {
+const getOptionalEnvVar = (
+  key: string,
+  defaultValue: string = ''
+): string => {
   return Constants.expoConfig?.extra?.[key] || process.env[key] || defaultValue;
 };
 
 export const env = {
-  // Anthropic Configuration
-  // Routed through the course's LiteLLM proxy (see the professor's
-  // migration spec) rather than Anthropic's API directly. EXPO_PUBLIC_
-  // ANTHROPIC_API_KEY now holds a LiteLLM team key, not a native Anthropic
-  // key -- same env var name, different value, to keep this change minimal.
-  anthropic: {
-    apiKey: getEnvVar('EXPO_PUBLIC_ANTHROPIC_API_KEY'),
-    baseURL: 'https://litellm.i-hq.tech/v1', // Fixed, documented proxy endpoint -- not per-developer, so not a separate env var.
-    model: 'anthropic/claude-haiku-4-5' as const, // LiteLLM's provider/model routing convention
+  // LLM Configuration (iHQ LiteLLM proxy — OpenAI-compatible endpoint in front of Claude)
+  llm: {
+    apiKey: getEnvVar('EXPO_PUBLIC_LITELLM_API_KEY'),
+    baseURL: getOptionalEnvVar(
+      'EXPO_PUBLIC_LITELLM_BASE_URL',
+      'https://litellm.i-hq.tech/v1'
+    ),
+    model: 'anthropic/claude-haiku-4-5' as const,
     maxTokens: 4096,
     temperature: 0.7,
   },
@@ -43,8 +45,12 @@ export const env = {
 
   // Application Configuration
   app: {
-    environment: getOptionalEnvVar('EXPO_PUBLIC_ENV', 'development') as 'development' | 'production',
-    enableLogging: getOptionalEnvVar('EXPO_PUBLIC_ENV', 'development') === 'development',
+    environment: getOptionalEnvVar(
+      'EXPO_PUBLIC_ENV',
+      'development'
+    ) as 'development' | 'production',
+    enableLogging:
+      getOptionalEnvVar('EXPO_PUBLIC_ENV', 'development') === 'development',
   },
 } as const;
 
