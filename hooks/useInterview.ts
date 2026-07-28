@@ -1,33 +1,33 @@
 /**
  * useInterview
  *
- * Drives a Create Twin / Create Project conversation. Owns all interview
- * orchestration (talking to the Coordinator, tracking the transcript,
- * detecting completion) so screens only render state and call sendMessage().
+ * Drives the full two-stage onboarding conversation: a short Personal
+ * Decision Profile interview, then an automatic, same-session transition
+ * into a Project Context interview once the personal profile is code-
+ * verified complete. Owns all orchestration (Coordinator calls, field
+ * accumulation, stage transition, completion) so screens only render state
+ * and call sendMessage()/selectSuggestion().
  *
- * Validation and persistence are NOT re-implemented here — InterviewAgent's
+ * Validation and persistence are NOT re-implemented here -- InterviewAgent's
  * postProcess() already runs ValidationTool and saves via ProfileTool/
- * ProjectTool once the profile is genuinely complete (agents/interview.ts).
- * This hook only needs to react to the `complete` flag it gets back.
+ * ProjectTool once each stage's fields are code-verified complete. This
+ * hook only needs to react to `complete` and merge `extracted` each turn.
  */
 
 import { useCallback, useRef, useState } from 'react';
 import { createAgentRegistry } from '../agents/AgentRegistry';
 import { InterviewMessage } from '../types/conversation';
 
-export type InterviewType = 'personal' | 'project';
-
-export interface UseInterviewOptions {
-  type: InterviewType;
-  /** Required when type === 'project' — which twin the project belongs to. */
-  twinId?: string;
-}
+export type InterviewStage = 'personal' | 'project';
 
 export interface UseInterviewResult {
   messages: InterviewMessage[];
   isLoading: boolean;
   isComplete: boolean;
   error: string | null;
+  stage: InterviewStage;
+  progress: { collected: number; total: number } | null;
+  suggestions: string[];
   /** Kicks off the interview with the agent's first question. Idempotent. */
   start: () => void;
   sendMessage: (content: string) => void;
@@ -37,48 +37,67 @@ export interface UseInterviewResult {
 // never per-render. See ARCHITECTURE.md.
 const registry = createAgentRegistry();
 
-const KICKOFF_MESSAGE: Record<InterviewType, string> = {
+const KICKOFF_MESSAGE: Record<InterviewStage, string> = {
   personal: "Hi, I'd like to create my Decision Twin.",
-  project: "I'd like to create a new project for my Decision Twin.",
+  project: "Let's set up my first project.",
 };
+
+const TRANSITION_MESSAGE =
+  "Great — that's your Decision Profile. Now let's set up your first project.";
 
 function makeId(role: 'agent' | 'user'): string {
   return `${role}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
-export function useInterview({ type, twinId }: UseInterviewOptions): UseInterviewResult {
+export function useInterview(): UseInterviewResult {
   const [messages, setMessages] = useState<InterviewMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isComplete, setIsComplete] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [stage, setStage] = useState<InterviewStage>('personal');
+  const [progress, setProgress] = useState<{ collected: number; total: number } | null>(null);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
 
-  // Mirrors `messages` synchronously so a turn always sends the transcript
-  // that includes the message that triggered it, without relying on a
-  // setState updater to sequence async work (an anti-pattern under Strict
-  // Mode / concurrent rendering, where updaters can run more than once).
+  // Full visible transcript, for the UI. Never reset.
   const messagesRef = useRef<InterviewMessage[]>([]);
+  // Current-stage-only transcript, sent to the Interview Agent. Reset on
+  // stage transition -- InterviewAgent counts agent turns in this list to
+  // know how many fields it's already asked about *in this stage*.
+  const stageMessagesRef = useRef<InterviewMessage[]>([]);
+  const collectedFieldsRef = useRef<Record<string, string | string[]>>({});
+  const twinIdRef = useRef<string | undefined>(undefined);
+  const stageRef = useRef<InterviewStage>('personal');
   const hasStarted = useRef(false);
 
-  const appendMessage = useCallback((message: InterviewMessage) => {
+  const appendVisible = useCallback((message: InterviewMessage) => {
     messagesRef.current = [...messagesRef.current, message];
     setMessages(messagesRef.current);
   }, []);
 
-  const activeWorkflow = type === 'personal' ? 'CREATE_TWIN' : 'CREATE_PROJECT';
+  const appendStageMessage = useCallback(
+    (message: InterviewMessage) => {
+      stageMessagesRef.current = [...stageMessagesRef.current, message];
+      appendVisible(message);
+    },
+    [appendVisible]
+  );
 
   const runTurn = useCallback(
-    async (transcript: InterviewMessage[]) => {
+    async (stageTranscript: InterviewMessage[]) => {
       setIsLoading(true);
       setError(null);
 
-      const latest = transcript[transcript.length - 1];
-      const message = latest ? latest.content : KICKOFF_MESSAGE[type];
+      const currentStage = stageRef.current;
+      const activeWorkflow = currentStage === 'personal' ? 'CREATE_TWIN' : 'CREATE_PROJECT';
+      const latest = stageTranscript[stageTranscript.length - 1];
+      const message = latest ? latest.content : KICKOFF_MESSAGE[currentStage];
 
       const result = await registry.coordinator.execute({
         message,
         activeWorkflow,
-        messages: transcript.map((m) => ({ role: m.role, content: m.content })),
-        context: twinId ? { twinId } : undefined,
+        messages: stageTranscript.map((m) => ({ role: m.role, content: m.content })),
+        collectedFields: collectedFieldsRef.current,
+        context: twinIdRef.current ? { twinId: twinIdRef.current } : undefined,
       });
 
       setIsLoading(false);
@@ -90,13 +109,42 @@ export function useInterview({ type, twinId }: UseInterviewOptions): UseIntervie
 
       const { interview } = result.output;
 
+      // Replace, not merge -- interview.collectedFields is already the full,
+      // normalized, accumulated state (see agents/interview.ts). Merging a
+      // delta here was the bug: a value normalized on one turn would never
+      // be re-normalized once carried forward as a stale raw copy.
+      if (interview.collectedFields) {
+        collectedFieldsRef.current = interview.collectedFields;
+      }
+      setSuggestions(interview.suggestions ?? []);
+      setProgress(interview.progress ?? null);
+
       if (interview.complete) {
+        if (interview.twinId) twinIdRef.current = interview.twinId;
+
+        if (currentStage === 'personal') {
+          stageRef.current = 'project';
+          setStage('project');
+          collectedFieldsRef.current = {};
+          stageMessagesRef.current = [];
+          setProgress(null);
+          setSuggestions([]);
+          appendVisible({
+            id: makeId('agent'),
+            role: 'agent',
+            content: TRANSITION_MESSAGE,
+            timestamp: new Date(),
+          });
+          void runTurn([]);
+          return;
+        }
+
         setIsComplete(true);
         return;
       }
 
       if (interview.nextQuestion) {
-        appendMessage({
+        appendStageMessage({
           id: makeId('agent'),
           role: 'agent',
           content: interview.nextQuestion,
@@ -104,7 +152,7 @@ export function useInterview({ type, twinId }: UseInterviewOptions): UseIntervie
         });
       }
     },
-    [type, twinId, activeWorkflow, appendMessage]
+    [appendVisible, appendStageMessage]
   );
 
   const start = useCallback(() => {
@@ -118,16 +166,26 @@ export function useInterview({ type, twinId }: UseInterviewOptions): UseIntervie
       const trimmed = content.trim();
       if (!trimmed || isLoading || isComplete) return;
 
-      appendMessage({
+      appendStageMessage({
         id: makeId('user'),
         role: 'user',
         content: trimmed,
         timestamp: new Date(),
       });
-      void runTurn(messagesRef.current);
+      void runTurn(stageMessagesRef.current);
     },
-    [isLoading, isComplete, appendMessage, runTurn]
+    [isLoading, isComplete, appendStageMessage, runTurn]
   );
 
-  return { messages, isLoading, isComplete, error, start, sendMessage };
+  return {
+    messages,
+    isLoading,
+    isComplete,
+    error,
+    stage,
+    progress,
+    suggestions,
+    start,
+    sendMessage,
+  };
 }

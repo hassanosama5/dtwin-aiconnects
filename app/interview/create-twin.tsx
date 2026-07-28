@@ -1,9 +1,11 @@
 /**
  * Create Twin Screen
  *
- * Conversational personal interview — no traditional form. All orchestration
- * (Coordinator, Interview Agent, validation, save) lives in useInterview();
- * this screen only renders state and forwards user input.
+ * Conversational two-stage onboarding -- Personal Decision Profile, then an
+ * automatic transition into Project Context -- no traditional form. All
+ * orchestration (Coordinator, Interview Agent, field tracking, stage
+ * transition, validation, save) lives in useInterview(); this screen only
+ * renders state and forwards user input.
  */
 
 import React, { useEffect, useRef, useState } from 'react';
@@ -26,13 +28,24 @@ import { Ionicons } from '@expo/vector-icons';
 import { useInterview } from '../../hooks/useInterview';
 import { MessageBubble } from '../../components/chat/MessageBubble';
 import { TypingIndicator } from '../../components/chat/TypingIndicator';
+import { ProgressBar } from '../../components/chat/ProgressBar';
+import { SuggestionChips } from '../../components/chat/SuggestionChips';
 import { theme } from '../../constants/theme';
+
+const STAGE_LABEL = {
+  personal: 'Building your Decision Profile',
+  project: 'Project Context',
+} as const;
+
+const STAGE_SUBTITLE = {
+  personal: 'A few questions about how you make decisions.',
+  project: "Now let's set the context for your first project.",
+} as const;
 
 export default function CreateTwinScreen() {
   const router = useRouter();
-  const { messages, isLoading, isComplete, error, start, sendMessage } = useInterview({
-    type: 'personal',
-  });
+  const { messages, isLoading, isComplete, error, stage, progress, suggestions, start, sendMessage } =
+    useInterview();
   const [draft, setDraft] = useState('');
   const scrollRef = useRef<ScrollView>(null);
 
@@ -42,7 +55,7 @@ export default function CreateTwinScreen() {
 
   useEffect(() => {
     scrollRef.current?.scrollToEnd({ animated: true });
-  }, [messages, isLoading]);
+  }, [messages, isLoading, suggestions]);
 
   useEffect(() => {
     if (!isComplete) return;
@@ -50,9 +63,9 @@ export default function CreateTwinScreen() {
     return () => clearTimeout(timeout);
   }, [isComplete, router]);
 
-  const handleSend = () => {
-    if (!draft.trim()) return;
-    sendMessage(draft);
+  const handleSend = (content: string) => {
+    if (!content.trim()) return;
+    sendMessage(content);
     setDraft('');
   };
 
@@ -76,10 +89,13 @@ export default function CreateTwinScreen() {
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
       <SafeAreaView className="flex-1">
-        <View className="px-6 pt-4 pb-3 border-b border-gray-100">
-          <Text className="text-sm text-gray-500">
-            A few questions about how you make decisions.
-          </Text>
+        <View className="border-b border-gray-100">
+          {progress && (
+            <ProgressBar label={STAGE_LABEL[stage]} collected={progress.collected} total={progress.total} />
+          )}
+          <View className="px-6 pt-1 pb-3">
+            <Text className="text-sm text-gray-500">{STAGE_SUBTITLE[stage]}</Text>
+          </View>
         </View>
 
         <ScrollView
@@ -100,6 +116,10 @@ export default function CreateTwinScreen() {
           </View>
         )}
 
+        {!isLoading && (
+          <SuggestionChips suggestions={suggestions} onSelect={handleSend} disabled={isLoading} />
+        )}
+
         <View className="flex-row items-end px-4 py-3 border-t border-gray-100 gap-2">
           <TextInput
             value={draft}
@@ -111,7 +131,7 @@ export default function CreateTwinScreen() {
             className="flex-1 bg-gray-100 rounded-2xl px-4 py-3 text-base text-gray-900 max-h-28"
           />
           <TouchableOpacity
-            onPress={handleSend}
+            onPress={() => handleSend(draft)}
             disabled={!canSend}
             className={`w-11 h-11 rounded-full items-center justify-center ${
               canSend ? 'bg-primary-600' : 'bg-gray-200'
