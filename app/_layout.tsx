@@ -59,6 +59,13 @@ export default function RootLayout() {
           }}
         />
         <Stack.Screen
+          name="interview/update-twin/[id]"
+          options={{
+            title: 'Update Decision Twin',
+            presentation: 'modal',
+          }}
+        />
+        <Stack.Screen
           name="chat/[projectId]"
           options={{
             title: 'Chat',

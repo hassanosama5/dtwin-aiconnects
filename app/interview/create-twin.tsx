@@ -18,7 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { InterviewChat, InterviewQuestion } from '../../components/shared/InterviewChat';
 import { ProfileSectionCard, BulletList } from '../../components/cards/ProfileSectionCard';
-import { registerCreatedTwin } from '../../utils/mockDirectory';
+import { createTwin } from '../../utils/mockDirectory';
 
 // Placeholder script — replace with the real Interview Agent conversation in Phase 3.
 const QUESTIONS: InterviewQuestion[] = [
@@ -70,7 +70,7 @@ export default function CreateTwinScreen() {
     const twinId = `new-twin-${ts}`;
     const projectId = `my-first-project-${ts}`;
 
-    registerCreatedTwin(
+    createTwin(
       {
         id: twinId,
         name,

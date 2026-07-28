@@ -7,15 +7,17 @@
  * Static UI only, placeholder data. Wiring to useTwins()/useTwin(id)
  * happens in Phase 3 (see ROADMAP.md).
  * Sprint 6: loading/empty/error states.
- * Sprint 7.1: header is now pinned above the scrolling content; unknown
- * ids fall back to the shared mockDirectory so newly-created twins (from
- * Create Twin) resolve to a real profile instead of "Twin not found."
+ * Sprint 7.1: header is pinned above the scrolling content.
+ * Sprint 7.2: twin data now lives in utils/mockDirectory.ts; "Start
+ * Interview" launches an update flow that improves this same twin in
+ * place. Shows "Last Updated" + a "Profile Evolution" history, and briefly
+ * highlights whichever sections the most recent update actually changed.
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { PressableScale } from '../../components/ui/PressableScale';
@@ -23,85 +25,13 @@ import { LoadingState } from '../../components/ui/LoadingState';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { ErrorState } from '../../components/ui/ErrorState';
 import { ProfileSectionCard, BulletList } from '../../components/cards/ProfileSectionCard';
-import { getCreatedTwin } from '../../utils/mockDirectory';
-
-interface MockProject {
-  id: string;
-  name: string;
-  subtitle: string;
-}
-
-interface MockTwinProfile {
-  name: string;
-  role: string;
-  decisionStyle: string;
-  values: string[];
-  communicationStyle: string[];
-  projects: MockProject[];
-}
-
-// Placeholder data — replace with useTwins()/useTwin(id) in Phase 3.
-const MOCK_TWIN_PROFILES: Record<string, MockTwinProfile> = {
-  'hassan-osama': {
-    name: 'Hassan Osama',
-    role: 'Project Manager',
-    decisionStyle: 'Analytical, data-driven, prefers evidence before making decisions.',
-    values: ['Customer First', 'Long-term Thinking', 'Simplicity'],
-    communicationStyle: ['Direct', 'Concise', 'Structured'],
-    projects: [
-      { id: 'banking-app', name: 'Banking App', subtitle: 'Retail Banking' },
-      { id: 'payments-platform', name: 'Payments Platform', subtitle: 'Compliance' },
-      { id: 'mobile-wallet', name: 'Mobile Wallet', subtitle: 'Innovation' },
-    ],
-  },
-  'khaled-ashraf': {
-    name: 'Khaled Ashraf',
-    role: 'Team Lead',
-    decisionStyle: 'Collaborative, consensus-seeking, weighs team input before deciding.',
-    values: ['Team Ownership', 'Quality', 'Transparency'],
-    communicationStyle: ['Supportive', 'Clear', 'Open'],
-    projects: [
-      { id: 'ai-dashboard', name: 'AI Dashboard', subtitle: 'Internal Tooling' },
-      { id: 'support-portal', name: 'Support Portal', subtitle: 'Customer Success' },
-    ],
-  },
-  'mona-youssef': {
-    name: 'Mona Youssef',
-    role: 'Product Owner',
-    decisionStyle: 'Customer-driven, prioritizes impact and speed to market.',
-    values: ['User Value', 'Speed', 'Iteration'],
-    communicationStyle: ['Persuasive', 'Story-driven', 'Direct'],
-    projects: [
-      { id: 'loyalty-app', name: 'Loyalty App', subtitle: 'Growth' },
-      { id: 'checkout-redesign', name: 'Checkout Redesign', subtitle: 'Conversion' },
-      { id: 'referral-program', name: 'Referral Program', subtitle: 'Acquisition' },
-      { id: 'subscription-tiers', name: 'Subscription Tiers', subtitle: 'Retention' },
-    ],
-  },
-  'habiba-anwar': {
-    name: 'Habiba Anwar',
-    role: 'Project Manager',
-    decisionStyle: 'Pragmatic, balances user needs with delivery speed before committing to a plan.',
-    values: ['User Experience', 'Team Wellbeing', 'Clarity'],
-    communicationStyle: ['Empathetic', 'Clear', 'Collaborative'],
-    projects: [
-      { id: 'onboarding-flow', name: 'Onboarding Flow', subtitle: 'Activation' },
-      { id: 'design-system', name: 'Design System', subtitle: 'Consistency' },
-      { id: 'notifications-center', name: 'Notifications Center', subtitle: 'Engagement' },
-    ],
-  },
-  'omar-ahmed': {
-    name: 'Omar Ahmed',
-    role: 'Project Manager',
-    decisionStyle: 'Systematic, prioritizes reliability and long-term maintainability over quick wins.',
-    values: ['Reliability', 'Ownership', 'Pragmatism'],
-    communicationStyle: ['Precise', 'Documented', 'Direct'],
-    projects: [
-      { id: 'infra-migration', name: 'Infrastructure Migration', subtitle: 'Platform' },
-      { id: 'data-pipeline', name: 'Data Pipeline', subtitle: 'Analytics' },
-    ],
-  },
-};
+import {
+  getTwin,
+  getHistory,
+  getLastUpdatedLabel,
+  consumeRecentlyChangedFields,
+  MockTwinProfile,
+} from '../../utils/mockDirectory';
 
 const LOAD_DELAY_MS = 500;
 
@@ -111,7 +41,13 @@ const SIMULATE_ERROR = false;
 
 type ViewStatus = 'loading' | 'success' | 'empty' | 'error';
 
-function ProjectCard({ project, onPress }: { project: MockProject; onPress: () => void }) {
+function ProjectCard({
+  project,
+  onPress,
+}: {
+  project: MockTwinProfile['projects'][number];
+  onPress: () => void;
+}) {
   const [pressed, setPressed] = useState(false);
 
   return (
@@ -124,18 +60,16 @@ function ProjectCard({ project, onPress }: { project: MockProject; onPress: () =
   );
 }
 
-function resolveTwin(id: string | undefined): MockTwinProfile | undefined {
-  if (!id) return undefined;
-  return MOCK_TWIN_PROFILES[id] ?? getCreatedTwin(id);
-}
-
 export default function TwinProfileScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const [status, setStatus] = useState<ViewStatus>('loading');
+  const [highlightedFields, setHighlightedFields] = useState<Set<string>>(new Set());
 
   // TODO: Phase 3 — replace with useTwins()/useTwin(id) once the hook exists.
-  const twin = resolveTwin(id);
+  const twin = getTwin(id);
+  const history = id ? getHistory(id) : [];
+  const lastUpdated = id ? getLastUpdatedLabel(id) : undefined;
 
   const load = useCallback(() => {
     setStatus('loading');
@@ -148,6 +82,17 @@ export default function TwinProfileScreen() {
   }, [twin]);
 
   useEffect(() => load(), [load]);
+
+  // One-time highlight of whichever sections the most recent "Start
+  // Interview" update actually changed — read-once, so it only flashes the
+  // first time this screen is seen after applying an update.
+  useFocusEffect(
+    useCallback(() => {
+      if (!id) return;
+      const changed = consumeRecentlyChangedFields(id);
+      if (changed.size > 0) setHighlightedFields(changed);
+    }, [id])
+  );
 
   if (status === 'loading') {
     return (
@@ -179,24 +124,30 @@ export default function TwinProfileScreen() {
       <View className="px-6 pt-6 pb-4">
         <Text className="text-3xl font-bold text-gray-900 mb-1">{twin.name}</Text>
         <Text className="text-base text-gray-600">{twin.role}</Text>
+        {lastUpdated && (
+          <Text className="text-xs text-gray-400 mt-2">Last Updated: {lastUpdated}</Text>
+        )}
       </View>
 
       <ScrollView className="flex-1">
         <View className="px-6 pb-6">
-          <ProfileSectionCard title="Decision Style">
+          <ProfileSectionCard title="Decision Style" highlight={highlightedFields.has('Decision Style')}>
             <Text className="text-sm text-gray-600 leading-5">{twin.decisionStyle}</Text>
           </ProfileSectionCard>
 
-          <ProfileSectionCard title="Core Values">
+          <ProfileSectionCard title="Core Values" highlight={highlightedFields.has('Core Value')}>
             <BulletList items={twin.values} />
           </ProfileSectionCard>
 
-          <ProfileSectionCard title="Communication Style">
+          <ProfileSectionCard
+            title="Communication Style"
+            highlight={highlightedFields.has('Communication Style')}
+          >
             <BulletList items={twin.communicationStyle} />
           </ProfileSectionCard>
 
           {/* Projects — flat list of cards, not nested in another Card */}
-          <View>
+          <View className="mb-6">
             <Text className="text-base font-semibold text-gray-900 mb-3">Projects</Text>
             {twin.projects.map((project) => (
               <ProjectCard
@@ -206,6 +157,25 @@ export default function TwinProfileScreen() {
               />
             ))}
           </View>
+
+          {history.length > 0 && (
+            <View>
+              <Text className="text-base font-semibold text-gray-900 mb-3">Profile Evolution</Text>
+              <Card>
+                {history.map((entry, index) => (
+                  <View
+                    key={entry.id}
+                    className={`flex-row items-start justify-between ${
+                      index < history.length - 1 ? 'mb-3' : ''
+                    }`}
+                  >
+                    <Text className="flex-1 text-sm text-gray-700 pr-3">{entry.label}</Text>
+                    <Text className="text-xs text-gray-400">{formatHistoryTimestamp(entry.timestamp)}</Text>
+                  </View>
+                ))}
+              </Card>
+            </View>
+          )}
         </View>
       </ScrollView>
 
@@ -213,13 +183,22 @@ export default function TwinProfileScreen() {
       <View className="px-6 py-4 bg-white border-t border-gray-200">
         <Button
           title="Start Interview"
-          onPress={() => {
-            // TODO: Phase 3 - wire to Interview Agent / useInterview() for re-interviewing an existing twin.
-            console.log('Start Interview pressed');
-          }}
+          onPress={() => router.push({ pathname: '/interview/update-twin/[id]', params: { id } })}
           fullWidth
         />
       </View>
     </SafeAreaView>
   );
+}
+
+function formatHistoryTimestamp(timestamp: number): string {
+  const diffMinutes = Math.floor((Date.now() - timestamp) / 60000);
+  if (diffMinutes < 1) return 'Today';
+  if (diffMinutes < 60) return 'Today';
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) return 'Today';
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays === 1) return 'Yesterday';
+  if (diffDays < 7) return 'Last Week';
+  return `${diffDays}d ago`;
 }

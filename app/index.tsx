@@ -23,7 +23,7 @@ import { PressableScale } from '../components/ui/PressableScale';
 import { LoadingState } from '../components/ui/LoadingState';
 import { EmptyState } from '../components/ui/EmptyState';
 import { ErrorState } from '../components/ui/ErrorState';
-import { listCreatedTwins } from '../utils/mockDirectory';
+import { listAllTwins, MockTwinProfile } from '../utils/mockDirectory';
 
 interface MockTwin {
   id: string;
@@ -32,14 +32,9 @@ interface MockTwin {
   projectCount: number;
 }
 
-// Placeholder data — replace with useTwins() in Phase 3.
-const INITIAL_TWINS: MockTwin[] = [
-  { id: 'hassan-osama', name: 'Hassan Osama', role: 'Project Manager', projectCount: 3 },
-  { id: 'khaled-ashraf', name: 'Khaled Ashraf', role: 'Team Lead', projectCount: 2 },
-  { id: 'mona-youssef', name: 'Mona Youssef', role: 'Product Owner', projectCount: 4 },
-  { id: 'habiba-anwar', name: 'Habiba Anwar', role: 'Project Manager', projectCount: 3 },
-  { id: 'omar-ahmed', name: 'Omar Ahmed', role: 'Project Manager', projectCount: 2 },
-];
+function toHomeTwin(profile: MockTwinProfile): MockTwin {
+  return { id: profile.id, name: profile.name, role: profile.role, projectCount: profile.projects.length };
+}
 
 const LOAD_DELAY_MS = 500;
 const REFRESH_DELAY_MS = 700;
@@ -94,15 +89,11 @@ function AnimatedTwinCard({
   );
 }
 
-function toHomeTwin(profile: { id: string; name: string; role: string; projects: unknown[] }): MockTwin {
-  return { id: profile.id, name: profile.name, role: profile.role, projectCount: profile.projects.length };
-}
-
 export default function HomeScreen() {
   const router = useRouter();
 
   const [status, setStatus] = useState<ViewStatus>('loading');
-  const [twins, setTwins] = useState<MockTwin[]>(INITIAL_TWINS);
+  const [twins, setTwins] = useState<MockTwin[]>(() => listAllTwins().map(toHomeTwin));
   const [search, setSearch] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const scrollY = useRef(new Animated.Value(0)).current;
@@ -119,21 +110,20 @@ export default function HomeScreen() {
 
   React.useEffect(() => load(), [load]);
 
-  // Re-sync with newly-created mock twins every time Home comes into focus
-  // (e.g. returning from Create Twin) — no navigation params involved, so
-  // there's nothing to go stale and nothing that could push a duplicate
-  // Home screen. Local/in-memory only — resets on app reload.
+  // Re-sync with the shared mock directory every time Home comes into focus
+  // (e.g. returning from Create Twin, or from updating an existing twin via
+  // Start Interview) — no navigation params involved, so there's nothing to
+  // go stale and nothing that could push a duplicate Home screen.
   useFocusEffect(
     useCallback(() => {
-      const created = listCreatedTwins().map(toHomeTwin);
-      setTwins([...INITIAL_TWINS, ...created]);
+      setTwins(listAllTwins().map(toHomeTwin));
     }, [])
   );
 
   function onRefresh() {
     setRefreshing(true);
     setTimeout(() => {
-      setTwins([...INITIAL_TWINS, ...listCreatedTwins().map(toHomeTwin)]);
+      setTwins(listAllTwins().map(toHomeTwin));
       setStatus('success');
       setRefreshing(false);
     }, REFRESH_DELAY_MS);

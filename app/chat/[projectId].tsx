@@ -33,7 +33,7 @@ import { SuggestionChips } from '../../components/ui/SuggestionChips';
 import { ChatBubble, ChatRole } from '../../components/chat/ChatBubble';
 import { ConfidenceBadge } from '../../components/chat/ConfidenceBadge';
 import { ReasoningCard } from '../../components/chat/ReasoningCard';
-import { MOCK_PROJECTS, getProjectById } from '../project/[id]';
+import { getProject } from '../../utils/mockDirectory';
 
 interface MockChatMessage {
   id: string;
@@ -97,7 +97,7 @@ type ViewStatus = 'loading' | 'success' | 'error';
 
 export default function ChatScreen() {
   const { projectId } = useLocalSearchParams<{ projectId: string }>();
-  const project = getProjectById(projectId) ?? MOCK_PROJECTS[DEFAULT_PROJECT_ID];
+  const project = getProject(projectId) ?? getProject(DEFAULT_PROJECT_ID)!;
   const twinFirstName = project.twinName.split(' ')[0];
 
   const [status, setStatus] = useState<ViewStatus>('loading');

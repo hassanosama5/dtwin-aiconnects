@@ -56,14 +56,23 @@ interface InterviewChatProps {
   successMessage: string;
   /** Rendered on the reveal screen — receives the user's raw answers in question order. */
   summary: (answers: string[]) => React.ReactNode;
+  /** Primary reveal-screen button label. Defaults to "Done". */
+  revealButtonLabel?: string;
   /**
-   * Fires immediately when Done is pressed, with the user's raw answers in
-   * question order — e.g. to register mock data using what they actually
-   * typed (not a canned summary). Runs before the success animation.
+   * Fires immediately when the primary reveal button is pressed, with the
+   * user's raw answers in question order — e.g. to register mock data
+   * using what they actually typed (not a canned summary). Runs before the
+   * success animation.
    */
   onComplete?: (answers: string[]) => void;
   /** Fires after the success animation finishes — the actual "leave this screen" action. */
   onDone: () => void;
+  /**
+   * When provided, the reveal screen shows a secondary button (labeled
+   * "Back") that discards the interview and calls this instead of
+   * onComplete/onDone — no success animation, no data changes.
+   */
+  onDiscard?: () => void;
 }
 
 const PREPARING_DELAY_MS = 1300;
@@ -97,8 +106,10 @@ export function InterviewChat({
   loadingLines,
   successMessage,
   summary,
+  revealButtonLabel = 'Done',
   onComplete,
   onDone,
+  onDiscard,
 }: InterviewChatProps) {
   const [phase, setPhase] = useState<InterviewPhase>('preparing');
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -224,8 +235,9 @@ export function InterviewChat({
         <ScrollView className="flex-1">
           <View className="p-6">{summary(answers)}</View>
         </ScrollView>
-        <View className="px-6 py-4 bg-white border-t border-gray-200">
-          <Button title="Done" onPress={handleDonePress} fullWidth />
+        <View className="px-6 py-4 bg-white border-t border-gray-200 gap-2">
+          <Button title={revealButtonLabel} onPress={handleDonePress} fullWidth />
+          {onDiscard && <Button title="Back" variant="secondary" onPress={onDiscard} fullWidth />}
         </View>
       </View>
     );
