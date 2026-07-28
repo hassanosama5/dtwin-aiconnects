@@ -92,7 +92,7 @@ export default function TwinProfileScreen() {
           </ProfileSectionCard>
 
           {/* Projects — flat list of cards, not nested in another Card */}
-          <View>
+          <View className="mb-6">
             <Text className="text-base font-semibold text-gray-900 mb-3">Projects</Text>
             {isProjectsLoading ? (
               <Text className="text-sm text-gray-500">Loading projects...</Text>
