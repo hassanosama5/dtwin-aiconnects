@@ -10,7 +10,6 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.32.1",
     "@expo/vector-icons": "^15.0.3",
     "@supabase/supabase-js": "^2.45.0",
     "expo": "^54.0.36",
@@ -21,6 +20,7 @@
     "expo-router": "~6.0.24",
     "expo-status-bar": "~3.0.9",
     "nativewind": "^4.2.6",
+    "openai": "^7.0.0",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-native": "0.81.5",

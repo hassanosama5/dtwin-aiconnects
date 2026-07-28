@@ -22,10 +22,11 @@ const getOptionalEnvVar = (key: string, defaultValue: string = ''): string => {
 };
 
 export const env = {
-  // Anthropic Configuration
-  anthropic: {
-    apiKey: getEnvVar('EXPO_PUBLIC_ANTHROPIC_API_KEY'),
-    model: 'claude-haiku-4-5' as const, // Centralized model configuration
+  // LLM Configuration (iHQ LiteLLM proxy — OpenAI-compatible endpoint in front of Claude)
+  llm: {
+    apiKey: getEnvVar('EXPO_PUBLIC_LITELLM_API_KEY'),
+    baseURL: getOptionalEnvVar('EXPO_PUBLIC_LITELLM_BASE_URL', 'https://litellm.i-hq.tech/v1'),
+    model: 'anthropic/claude-haiku-4-5' as const, // Centralized model configuration
     maxTokens: 4096,
     temperature: 0.7,
   },
