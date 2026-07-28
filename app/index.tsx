@@ -7,10 +7,12 @@
 
 import React from 'react';
 import { View, Text, ScrollView, SafeAreaView } from 'react-native';
+import { useRouter } from 'expo-router';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 
 export default function HomeScreen() {
+  const router = useRouter();
   return (
     <SafeAreaView className="flex-1 bg-gray-50">
       <ScrollView className="flex-1">
@@ -43,6 +45,13 @@ export default function HomeScreen() {
               console.log('Create Twin pressed');
             }}
             fullWidth
+          />
+
+          <Button
+            title="Open Chat Demo"
+            onPress={() => router.push('/chat/demo-project')}
+            fullWidth
+            className="mt-3"
           />
 
           {/* Info Card */}

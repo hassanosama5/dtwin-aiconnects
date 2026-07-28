@@ -25,6 +25,13 @@ export const env = {
     temperature: 0.7,
   },
 
+  // LiteLLM / OpenAI-compatible Configuration
+  litellm: {
+    apiKey: getEnvVar('EXPO_PUBLIC_LITELLM_API_KEY', ''),
+    baseUrl: getEnvVar('EXPO_PUBLIC_LITELLM_BASE_URL', 'https://litellm.i-hq.tech/v1'),
+    model: getEnvVar('EXPO_PUBLIC_LITELLM_MODEL', 'anthropic/claude-haiku-4-5'),
+  },
+
   // Supabase Configuration
   supabase: {
     url: getEnvVar('EXPO_PUBLIC_SUPABASE_URL', 'https://example.supabase.co'),

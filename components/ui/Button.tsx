@@ -20,6 +20,7 @@ interface ButtonProps {
   loading?: boolean;
   fullWidth?: boolean;
   icon?: React.ReactNode;
+  className?: string;
 }
 
 export function Button({
@@ -31,6 +32,7 @@ export function Button({
   loading = false,
   fullWidth = false,
   icon,
+  className,
 }: ButtonProps) {
   const getVariantStyles = () => {
     switch (variant) {
@@ -91,6 +93,7 @@ export function Button({
         items-center
         justify-center
         ${disabled || loading ? 'opacity-50' : ''}
+        ${className ?? ''}
       `}
     >
       {loading ? (

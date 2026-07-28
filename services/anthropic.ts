@@ -1,8 +1,8 @@
 /**
- * Anthropic Service
+ * LLM Service
  *
- * Wrapper around Anthropic SDK for Claude API calls.
- * Supports structured outputs with Zod validation and automatic retries.
+ * Uses the LiteLLM OpenAI-compatible endpoint by default, with Anthropic SDK
+ * as a fallback for backwards compatibility.
  */
 
 import Anthropic from '@anthropic-ai/sdk';
@@ -11,20 +11,17 @@ import { env } from '../config/env';
 import { logger } from '../utils/logger';
 import { validateAgentResponse } from '../utils/validation';
 
-// Initialize Anthropic client only when a real key is available
 const anthropic = env.anthropic.apiKey
   ? new Anthropic({
       apiKey: env.anthropic.apiKey,
     })
   : null;
 
-// Message type
 export interface ClaudeMessage {
   role: 'user' | 'assistant';
   content: string;
 }
 
-// Chat request configuration
 export interface ChatRequest<T = unknown> {
   systemPrompt: string;
   messages: ClaudeMessage[];
@@ -34,7 +31,6 @@ export interface ChatRequest<T = unknown> {
   maxTokens?: number;
 }
 
-// Chat response
 export interface ChatResponse<T = unknown> {
   content: string;
   parsed?: T;
@@ -44,12 +40,6 @@ export interface ChatResponse<T = unknown> {
   };
 }
 
-/**
- * Make a chat completion request to Claude
- *
- * @param config - Chat configuration
- * @returns Parsed and validated response
- */
 export async function chat<T = unknown>(
   config: ChatRequest<T>
 ): Promise<ChatResponse<T>> {
@@ -62,14 +52,9 @@ export async function chat<T = unknown>(
     maxTokens = env.anthropic.maxTokens,
   } = config;
 
-  const endTimer = logger.time('Claude API call');
+  const endTimer = logger.time('LLM API call');
 
   try {
-    if (!anthropic) {
-      throw new Error('Anthropic API key is not configured. Set EXPO_PUBLIC_ANTHROPIC_API_KEY to enable live responses.');
-    }
-
-    // Add JSON instruction if schema is provided
     const enhancedMessages = schema
       ? [
           ...messages,
@@ -80,7 +65,32 @@ export async function chat<T = unknown>(
         ]
       : messages;
 
-    // Make API call
+    if (env.litellm.apiKey) {
+      const response = await callLiteLlm({
+        systemPrompt,
+        messages: enhancedMessages,
+        temperature,
+        maxTokens,
+      });
+
+      endTimer();
+
+      if (schema) {
+        const parsed = await parseAndValidate(response.content, schema, maxRetries);
+        return {
+          content: response.content,
+          parsed,
+          usage: response.usage,
+        };
+      }
+
+      return response as ChatResponse<T>;
+    }
+
+    if (!anthropic) {
+      throw new Error('No LLM provider is configured. Set EXPO_PUBLIC_LITELLM_API_KEY or EXPO_PUBLIC_ANTHROPIC_API_KEY to enable live responses.');
+    }
+
     const response = await anthropic.messages.create({
       model: env.anthropic.model,
       max_tokens: maxTokens,
@@ -91,7 +101,6 @@ export async function chat<T = unknown>(
 
     endTimer();
 
-    // Extract text content
     const textContent = response.content
       .filter((block) => block.type === 'text')
       .map((block) => (block as any).text)
@@ -102,7 +111,6 @@ export async function chat<T = unknown>(
       tokens: response.usage,
     });
 
-    // Parse and validate if schema provided
     if (schema) {
       const parsed = await parseAndValidate(textContent, schema, maxRetries);
       return {
@@ -115,7 +123,6 @@ export async function chat<T = unknown>(
       };
     }
 
-    // Return raw response
     return {
       content: textContent,
       usage: {
@@ -125,14 +132,79 @@ export async function chat<T = unknown>(
     };
   } catch (error) {
     endTimer();
-    logger.error('Claude API call failed', error);
-    throw new Error(`Anthropic API error: ${error}`);
+    logger.error('LLM API call failed', error);
+    throw new Error(`LLM API error: ${error}`);
   }
 }
 
-/**
- * Parse and validate JSON response
- */
+async function callLiteLlm(config: {
+  systemPrompt: string;
+  messages: ClaudeMessage[];
+  temperature: number;
+  maxTokens: number;
+}): Promise<ChatResponse> {
+  const { systemPrompt, messages, temperature, maxTokens } = config;
+  const payload = {
+    model: env.litellm.model,
+    temperature,
+    max_tokens: maxTokens,
+    messages: [
+      { role: 'system', content: systemPrompt },
+      ...messages.map((message) => ({ role: message.role, content: message.content })),
+    ],
+  };
+
+  const response = await fetch(`${env.litellm.baseUrl}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${env.litellm.apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.text();
+    throw new Error(`LiteLLM API error: ${response.status} ${errorBody}`);
+  }
+
+  const data = (await response.json()) as {
+    choices?: Array<{
+      message?: {
+        content?: string | Array<{ type?: string; text?: string }>;
+      };
+    }>;
+    usage?: {
+      prompt_tokens?: number;
+      completion_tokens?: number;
+    };
+  };
+
+  const content = extractContent(data.choices?.[0]?.message?.content);
+
+  return {
+    content,
+    usage: {
+      inputTokens: data.usage?.prompt_tokens ?? 0,
+      outputTokens: data.usage?.completion_tokens ?? 0,
+    },
+  };
+}
+
+function extractContent(content: string | Array<{ type?: string; text?: string }> | undefined): string {
+  if (typeof content === 'string') {
+    return content;
+  }
+
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => part.text ?? '')
+      .join('');
+  }
+
+  return '';
+}
+
 async function parseAndValidate<T>(
   content: string,
   schema: z.ZodSchema<T>,
@@ -142,16 +214,14 @@ async function parseAndValidate<T>(
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      // Extract JSON from response (handle markdown code blocks)
       const jsonMatch = content.match(/```json\s*([\s\S]*?)\s*```/) ||
-                        content.match(/```\s*([\s\S]*?)\s*```/) ||
-                        [null, content];
+        content.match(/```\s*([\s\S]*?)\s*```/) ||
+        [null, content];
 
       const jsonString = jsonMatch[1] || content;
       const parsed = JSON.parse(jsonString.trim());
 
-      // Validate with schema
-      const result = validateAgentResponse(schema, parsed, 'Claude');
+      const result = validateAgentResponse(schema, parsed, 'LLM');
 
       if (result.success) {
         return result.data;
@@ -159,28 +229,19 @@ async function parseAndValidate<T>(
 
       lastError = result.error;
       logger.warning(`Validation failed (attempt ${attempt + 1}/${maxRetries + 1})`, result.error);
-
     } catch (error) {
       lastError = `JSON parse error: ${error}`;
       logger.warning(`Parse failed (attempt ${attempt + 1}/${maxRetries + 1})`, error);
     }
 
-    // Don't retry on last attempt
     if (attempt < maxRetries) {
       logger.info('Retrying with corrected prompt...');
-      // In a real implementation, we could make another API call here
-      // For now, we just log and continue
     }
   }
 
   throw new Error(`Failed to parse valid response after ${maxRetries + 1} attempts. Last error: ${lastError}`);
 }
 
-/**
- * Stream a chat completion (for future use)
- *
- * Useful for showing real-time agent responses in the UI
- */
 export async function* chatStream(
   config: Omit<ChatRequest, 'schema'>
 ): AsyncGenerator<string> {
@@ -192,8 +253,73 @@ export async function* chatStream(
   } = config;
 
   try {
+    if (env.litellm.apiKey) {
+      const response = await fetch(`${env.litellm.baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${env.litellm.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: env.litellm.model,
+          temperature,
+          max_tokens: maxTokens,
+          stream: true,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            ...messages.map((message) => ({ role: message.role, content: message.content })),
+          ],
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`LiteLLM streaming error: ${response.status}`);
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error('Streaming response was not available.');
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          break;
+        }
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || trimmed === 'data: [DONE]') {
+            continue;
+          }
+
+          if (trimmed.startsWith('data: ')) {
+            const payload = trimmed.slice(6);
+            try {
+              const json = JSON.parse(payload);
+              const delta = json.choices?.[0]?.delta?.content;
+              if (typeof delta === 'string') {
+                yield delta;
+              }
+            } catch {
+              // Ignore incomplete stream chunks.
+            }
+          }
+        }
+      }
+
+      return;
+    }
+
     if (!anthropic) {
-      throw new Error('Anthropic API key is not configured. Set EXPO_PUBLIC_ANTHROPIC_API_KEY to enable streaming.');
+      throw new Error('No LLM provider is configured. Set EXPO_PUBLIC_LITELLM_API_KEY or EXPO_PUBLIC_ANTHROPIC_API_KEY to enable streaming.');
     }
 
     const stream = await anthropic.messages.create({
@@ -214,17 +340,14 @@ export async function* chatStream(
       }
     }
   } catch (error) {
-    logger.error('Claude streaming failed', error);
-    throw new Error(`Anthropic streaming error: ${error}`);
+    logger.error('LLM streaming failed', error);
+    throw new Error(`LLM streaming error: ${error}`);
   }
 }
 
-/**
- * Get current model configuration
- */
 export function getModelConfig() {
   return {
-    model: env.anthropic.model,
+    model: env.litellm.apiKey ? env.litellm.model : env.anthropic.model,
     maxTokens: env.anthropic.maxTokens,
     temperature: env.anthropic.temperature,
   };
