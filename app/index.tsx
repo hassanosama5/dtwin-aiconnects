@@ -25,6 +25,8 @@ const MOCK_TWINS: MockTwin[] = [
   { id: 'hassan-osama', name: 'Hassan Osama', role: 'Project Manager', projectCount: 3 },
   { id: 'khaled-ashraf', name: 'Khaled Ashraf', role: 'Team Lead', projectCount: 2 },
   { id: 'mona-youssef', name: 'Mona Youssef', role: 'Product Owner', projectCount: 4 },
+  { id: 'habiba-anwar', name: 'Habiba Anwar', role: 'Project Manager', projectCount: 3 },
+  { id: 'omar-ahmed', name: 'Omar Ahmed', role: 'Project Manager', projectCount: 2 },
 ];
 
 function TwinCard({ twin, onPress }: { twin: MockTwin; onPress: () => void }) {
@@ -75,10 +77,7 @@ export default function HomeScreen() {
           {/* Actions */}
           <Button
             title="Create Twin"
-            onPress={() => {
-              // TODO: Phase 2 - Navigate to interview screen
-              console.log('Create Twin pressed');
-            }}
+            onPress={() => router.push('/interview/create-twin')}
             fullWidth
           />
         </View>

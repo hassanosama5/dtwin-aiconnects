@@ -16,11 +16,12 @@ import { Button } from '../../components/ui/Button';
 import { ProfileSectionCard, BulletList } from '../../components/cards/ProfileSectionCard';
 import { ProjectProfile } from '../../types/profile';
 
-type MockProject = ProjectProfile & { twinName: string };
+export type MockProject = ProjectProfile & { twinName: string };
 
 // Placeholder data — replace with useProjects()/useProject(id) in Phase 3.
 // IDs match the mock project ids used in app/twin/[id].tsx.
-const MOCK_PROJECTS: Record<string, MockProject> = {
+// Exported so app/chat/[projectId].tsx (Sprint 5) can reuse the same data for its header.
+export const MOCK_PROJECTS: Record<string, MockProject> = {
   'banking-app': {
     name: 'Banking App',
     twinName: 'Hassan Osama',
@@ -108,6 +109,90 @@ const MOCK_PROJECTS: Record<string, MockProject> = {
       'Never remove a payment method without a replacement.',
     ],
     escalationRules: ['Any drop in successful payment rate is escalated immediately.'],
+  },
+  'referral-program': {
+    name: 'Referral Program',
+    twinName: 'Mona Youssef',
+    goal: 'Acquire new customers at a lower cost by turning existing users into advocates.',
+    priorities: ['Acquisition cost', 'Fraud prevention', 'Simplicity'],
+    constraints: ['Fixed reward budget per quarter'],
+    decisionRules: [
+      'Reward structures must stay simple enough to explain in one sentence.',
+      'Any change to payout amounts requires a cost review first.',
+    ],
+    escalationRules: ['Suspected referral fraud is escalated immediately.'],
+  },
+  'subscription-tiers': {
+    name: 'Subscription Tiers',
+    twinName: 'Mona Youssef',
+    goal: 'Improve retention by giving customers a clear reason to stay subscribed.',
+    priorities: ['Retention', 'Perceived value', 'Billing reliability'],
+    constraints: ['Cannot change pricing for existing subscribers mid-cycle'],
+    decisionRules: [
+      'New tier benefits must not cannibalize the top existing tier.',
+      'Pricing changes always apply to new subscribers first.',
+    ],
+    escalationRules: ['Any billing accuracy issue is escalated immediately.'],
+  },
+  'onboarding-flow': {
+    name: 'Onboarding Flow',
+    twinName: 'Habiba Anwar',
+    goal: 'Get new users to their first meaningful action as quickly and clearly as possible.',
+    priorities: ['Activation rate', 'Clarity', 'Accessibility'],
+    constraints: ['Cannot add mandatory steps without design review'],
+    decisionRules: [
+      'Cut a step before adding a new one.',
+      'Every screen must have a single primary action.',
+    ],
+    escalationRules: ['Any drop in activation rate after a change is escalated.'],
+  },
+  'design-system': {
+    name: 'Design System',
+    twinName: 'Habiba Anwar',
+    goal: 'Give every screen a consistent, reusable set of components and patterns.',
+    priorities: ['Consistency', 'Reusability', 'Accessibility'],
+    constraints: ['Small design team, limited bandwidth for one-off requests'],
+    decisionRules: [
+      'New components are only added once used in two or more screens.',
+      'Breaking changes require a migration plan before merging.',
+    ],
+    escalationRules: ['Any accessibility regression is escalated immediately.'],
+  },
+  'notifications-center': {
+    name: 'Notifications Center',
+    twinName: 'Habiba Anwar',
+    goal: 'Keep users informed without overwhelming them with noise.',
+    priorities: ['Engagement', 'Relevance', 'User control'],
+    constraints: ['Cannot send more than one push per day per user'],
+    decisionRules: [
+      'Users must be able to mute any notification category.',
+      'Favor in-app summaries over push for low-urgency updates.',
+    ],
+    escalationRules: ['Any spike in notification opt-outs is escalated.'],
+  },
+  'infra-migration': {
+    name: 'Infrastructure Migration',
+    twinName: 'Omar Ahmed',
+    goal: 'Move core services to the new platform with zero unplanned downtime.',
+    priorities: ['Reliability', 'Rollback safety', 'Cost'],
+    constraints: ['Migration must happen outside business hours'],
+    decisionRules: [
+      'Every migration step must have a tested rollback path.',
+      'No migration proceeds without a passing staging run.',
+    ],
+    escalationRules: ['Any production incident during migration is escalated immediately.'],
+  },
+  'data-pipeline': {
+    name: 'Data Pipeline',
+    twinName: 'Omar Ahmed',
+    goal: 'Deliver accurate, timely data to the teams that depend on it.',
+    priorities: ['Data accuracy', 'Timeliness', 'Maintainability'],
+    constraints: ['Fixed infrastructure budget for this quarter'],
+    decisionRules: [
+      'Schema changes require notifying all downstream consumers first.',
+      'Prefer well-documented batch jobs over one-off scripts.',
+    ],
+    escalationRules: ['Any data accuracy issue reaching a dashboard is escalated immediately.'],
   },
 };
 

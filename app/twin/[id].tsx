@@ -65,6 +65,31 @@ const MOCK_TWIN_PROFILES: Record<string, MockTwinProfile> = {
     projects: [
       { id: 'loyalty-app', name: 'Loyalty App', subtitle: 'Growth' },
       { id: 'checkout-redesign', name: 'Checkout Redesign', subtitle: 'Conversion' },
+      { id: 'referral-program', name: 'Referral Program', subtitle: 'Acquisition' },
+      { id: 'subscription-tiers', name: 'Subscription Tiers', subtitle: 'Retention' },
+    ],
+  },
+  'habiba-anwar': {
+    name: 'Habiba Anwar',
+    role: 'Project Manager',
+    decisionStyle: 'Pragmatic, balances user needs with delivery speed before committing to a plan.',
+    values: ['User Experience', 'Team Wellbeing', 'Clarity'],
+    communicationStyle: ['Empathetic', 'Clear', 'Collaborative'],
+    projects: [
+      { id: 'onboarding-flow', name: 'Onboarding Flow', subtitle: 'Activation' },
+      { id: 'design-system', name: 'Design System', subtitle: 'Consistency' },
+      { id: 'notifications-center', name: 'Notifications Center', subtitle: 'Engagement' },
+    ],
+  },
+  'omar-ahmed': {
+    name: 'Omar Ahmed',
+    role: 'Project Manager',
+    decisionStyle: 'Systematic, prioritizes reliability and long-term maintainability over quick wins.',
+    values: ['Reliability', 'Ownership', 'Pragmatism'],
+    communicationStyle: ['Precise', 'Documented', 'Direct'],
+    projects: [
+      { id: 'infra-migration', name: 'Infrastructure Migration', subtitle: 'Platform' },
+      { id: 'data-pipeline', name: 'Data Pipeline', subtitle: 'Analytics' },
     ],
   },
 };
