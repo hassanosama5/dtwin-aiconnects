@@ -7,6 +7,8 @@
 
 import React from 'react';
 import { View, Text } from 'react-native';
+// See app/index.tsx -- react-native's own SafeAreaView is deprecated and
+// collapses to zero height under the New Architecture on iOS.
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { InterviewChat } from '../../components/shared/InterviewChat';

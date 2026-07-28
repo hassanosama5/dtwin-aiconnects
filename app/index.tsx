@@ -1,87 +1,111 @@
 /**
  * Home Screen
  *
- * Displays all Decision Twins.
- * Sprint 2: static UI, mock data — wiring to useTwins() happens in Phase 3.
+ * Lists all Decision Twins. Refetches whenever the screen regains focus
+ * (e.g. after the Create Twin modal is dismissed) rather than relying on
+ * global state -- per PROJECT_SPEC.md's "fetch it when needed" principle.
  */
 
-import React from 'react';
-import { View, Text, ScrollView, Pressable } from 'react-native';
+import React, { useCallback, useState } from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  ScrollView,
+  ActivityIndicator,
+  TouchableOpacity,
+} from 'react-native';
+// react-native's own SafeAreaView is deprecated and has known inset-
+// calculation problems under the New Architecture on iOS -- can collapse
+// to zero height, taking flex-1 children down with it, with no crash.
+// react-native-safe-area-context is already a project dependency.
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Button } from '../components/ui/Button';
-import { Card } from '../components/ui/Card';
-import { Avatar } from '../components/ui/Avatar';
-
-interface MockTwin {
-  id: string;
-  name: string;
-  role: string;
-  projectCount: number;
-}
-
-// Placeholder data — replace with useTwins() in Phase 3.
-const MOCK_TWINS: MockTwin[] = [
-  { id: 'hassan-osama', name: 'Hassan Osama', role: 'Project Manager', projectCount: 3 },
-  { id: 'khaled-ashraf', name: 'Khaled Ashraf', role: 'Team Lead', projectCount: 2 },
-  { id: 'mona-youssef', name: 'Mona Youssef', role: 'Product Owner', projectCount: 4 },
-  { id: 'habiba-anwar', name: 'Habiba Anwar', role: 'Project Manager', projectCount: 3 },
-  { id: 'omar-ahmed', name: 'Omar Ahmed', role: 'Project Manager', projectCount: 2 },
-];
-
-function TwinCard({ twin, onPress }: { twin: MockTwin; onPress: () => void }) {
-  return (
-    <Pressable onPress={onPress}>
-      <Card className="mb-3 flex-row items-center">
-        <Avatar name={twin.name} size="md" />
-        <View className="flex-1 ml-3">
-          <Text className="text-base font-semibold text-gray-900">{twin.name}</Text>
-          <Text className="text-sm text-gray-600">{twin.role}</Text>
-        </View>
-        <Text className="text-sm text-gray-500">
-          {twin.projectCount} {twin.projectCount === 1 ? 'Project' : 'Projects'}
-        </Text>
-      </Card>
-    </Pressable>
-  );
-}
+import { useFocusEffect } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
+import { useTwins } from '../hooks/useTwins';
+import { TwinCard } from '../components/cards/TwinCard';
+import { theme } from '../constants/theme';
 
 export default function HomeScreen() {
   const router = useRouter();
+  const { twins, isLoading, error, refresh } = useTwins();
+  const [search, setSearch] = useState('');
+
+  useFocusEffect(
+    useCallback(() => {
+      void refresh();
+    }, [refresh])
+  );
+
+  const filteredTwins = search.trim()
+    ? twins.filter((twin) => twin.name.toLowerCase().includes(search.trim().toLowerCase()))
+    : twins;
 
   return (
-    <SafeAreaView className="flex-1 bg-gray-50">
-      <ScrollView className="flex-1">
-        <View className="p-6">
-          {/* Header */}
-          <View className="mb-6">
-            <Text className="text-3xl font-bold text-gray-900 mb-2">
-              Decision Twin
-            </Text>
-            <Text className="text-base text-gray-600">
-              Who would you like to ask?
-            </Text>
-          </View>
+    <SafeAreaView className="flex-1 bg-white">
+      <ScrollView className="flex-1" contentContainerStyle={{ flexGrow: 1 }}>
+        {/* Title is the native large header (see app/_layout.tsx) -- only the
+            subtitle lives here, to avoid rendering "Decision Twin" twice. */}
+        <View className="px-6 pt-1 pb-4">
+          <Text className="text-base text-gray-500">Who would you like to ask?</Text>
+        </View>
 
-          {/* Twin List */}
-          <View className="mb-4">
-            {MOCK_TWINS.map((twin) => (
-              <TwinCard
-                key={twin.id}
-                twin={twin}
-                onPress={() => router.push(`/twin/${twin.id}`)}
+        {twins.length > 0 && (
+          <View className="px-6 pb-4">
+            <View className="flex-row items-center bg-gray-100 rounded-xl px-4 py-2.5">
+              <Ionicons name="search" size={18} color={theme.colors.gray[400]} />
+              <TextInput
+                value={search}
+                onChangeText={setSearch}
+                placeholder="Search twins..."
+                placeholderTextColor={theme.colors.gray[400]}
+                className="flex-1 ml-2 text-base text-gray-900"
               />
-            ))}
+            </View>
           </View>
+        )}
 
-          {/* Actions */}
-          <Button
-            title="Create Twin"
-            onPress={() => router.push('/interview/create-twin')}
-            fullWidth
-          />
+        <View className="px-6 flex-1">
+          {isLoading && twins.length === 0 ? (
+            <View className="items-center justify-center py-20">
+              <ActivityIndicator color={theme.colors.primary[600]} />
+            </View>
+          ) : error ? (
+            <View className="items-center justify-center py-20 px-4">
+              <Text className="text-sm text-red-500 text-center">{error}</Text>
+            </View>
+          ) : twins.length === 0 ? (
+            <View className="items-center justify-center py-20 px-4">
+              <View className="w-16 h-16 rounded-full bg-primary-50 items-center justify-center mb-4">
+                <Ionicons name="person-add-outline" size={28} color={theme.colors.primary[600]} />
+              </View>
+              <Text className="text-base font-semibold text-gray-900 mb-1 text-center">
+                You haven't created any Decision Twins yet.
+              </Text>
+              <Text className="text-sm text-gray-500 text-center">
+                Create your first Twin to get started.
+              </Text>
+            </View>
+          ) : filteredTwins.length === 0 ? (
+            <View className="items-center justify-center py-20 px-4">
+              <Text className="text-sm text-gray-500 text-center">
+                No twins match "{search}".
+              </Text>
+            </View>
+          ) : (
+            filteredTwins.map((twin) => <TwinCard key={twin.id} twin={twin} />)
+          )}
         </View>
       </ScrollView>
+
+      <TouchableOpacity
+        onPress={() => router.push('/interview/create-twin')}
+        activeOpacity={0.85}
+        className="absolute bottom-8 right-6 w-14 h-14 rounded-full bg-primary-600 items-center justify-center shadow-lg"
+      >
+        <Ionicons name="add" size={28} color="#ffffff" />
+      </TouchableOpacity>
     </SafeAreaView>
   );
 }

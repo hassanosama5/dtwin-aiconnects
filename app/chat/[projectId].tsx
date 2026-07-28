@@ -8,6 +8,8 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
+// See app/index.tsx -- react-native's own SafeAreaView is deprecated and
+// collapses to zero height under the New Architecture on iOS.
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';
 import { Button } from '../../components/ui/Button';
