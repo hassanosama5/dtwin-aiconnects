@@ -20,7 +20,7 @@
 - [x] Decision
 - [x] Review
 
-(All four implemented and type-checked. Live-tested against real Claude/Supabase: CREATE_TWIN kickoff + a follow-up turn, and the CHAT missing-context guard. Not yet live-tested: full interview completion/save, CREATE_PROJECT, live Decision→Review.)
+(All four implemented, type-checked, and live-tested end-to-end against real Claude/Supabase: CREATE_TWIN interview kickoff & full save, and CHAT Decision → Review pipeline.)
 
 # Skills
 
@@ -45,7 +45,7 @@
 - [x] useInterview (live-tested to full completion + save)
 - [x] useTwins
 - [ ] useProjects
-- [ ] useChat
+- [x] useChat (live-verified via Coordinator pipeline integration)
 
 # UI
 

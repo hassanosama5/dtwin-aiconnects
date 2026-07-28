@@ -1,19 +1,19 @@
-import Constants from 'expo-constants';
-
-/**
- * Environment Configuration
- *
- * All environment variables are accessed through this module.
- * No secrets should ever be hardcoded in the application.
- */
+let expoConfig: any = null;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const Constants = require('expo-constants');
+  expoConfig = Constants?.default?.expoConfig || Constants?.expoConfig;
+} catch {
+  // Running in standard Node.js environment
+}
 
 const getEnvVar = (key: string, defaultValue: string = ''): string => {
-  const value = Constants.expoConfig?.extra?.[key] || process.env[key] || defaultValue;
+  const value = expoConfig?.extra?.[key] || process.env[key] || defaultValue;
   return value;
 };
 
 const getOptionalEnvVar = (key: string, defaultValue: string = ''): string => {
-  return Constants.expoConfig?.extra?.[key] || process.env[key] || defaultValue;
+  return expoConfig?.extra?.[key] || process.env[key] || defaultValue;
 };
 
 export const env = {
