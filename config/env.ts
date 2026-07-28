@@ -23,9 +23,14 @@ const getOptionalEnvVar = (key: string, defaultValue: string = ''): string => {
 
 export const env = {
   // Anthropic Configuration
+  // Routed through the course's LiteLLM proxy (see the professor's
+  // migration spec) rather than Anthropic's API directly. EXPO_PUBLIC_
+  // ANTHROPIC_API_KEY now holds a LiteLLM team key, not a native Anthropic
+  // key -- same env var name, different value, to keep this change minimal.
   anthropic: {
     apiKey: getEnvVar('EXPO_PUBLIC_ANTHROPIC_API_KEY'),
-    model: 'claude-haiku-4-5' as const, // Centralized model configuration
+    baseURL: 'https://litellm.i-hq.tech/v1', // Fixed, documented proxy endpoint -- not per-developer, so not a separate env var.
+    model: 'anthropic/claude-haiku-4-5' as const, // LiteLLM's provider/model routing convention
     maxTokens: 4096,
     temperature: 0.7,
   },

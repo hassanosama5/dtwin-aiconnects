@@ -1,19 +1,36 @@
 /**
  * Anthropic Service
  *
- * Wrapper around Anthropic SDK for Claude API calls.
+ * Wrapper around Claude API calls. Transport: the OpenAI-compatible client
+ * pointed at the course's LiteLLM proxy (see the professor's migration
+ * spec) -- LiteLLM routes `anthropic/claude-haiku-4-5` to real Claude, but
+ * only documents an OpenAI-compatible endpoint, so the `openai` SDK talks
+ * to it directly instead of assuming an undocumented Anthropic-format route.
+ *
+ * Every exported name/signature below (chat, chatStream, getModelConfig,
+ * ClaudeMessage, ChatRequest, ChatResponse) is unchanged from the direct-
+ * Anthropic-SDK version -- only the transport internals moved, so no other
+ * file in the codebase needed to change.
+ *
  * Supports structured outputs with Zod validation and automatic retries.
  */
 
-import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 import { z } from 'zod';
 import { env } from '../config/env';
 import { logger } from '../utils/logger';
 import { validateAgentResponse } from '../utils/validation';
 
-// Initialize Anthropic client
-const anthropic = new Anthropic({
+// Initialize the OpenAI-compatible client against the LiteLLM proxy.
+// dangerouslyAllowBrowser: this app already ships EXPO_PUBLIC_* keys in the
+// client bundle (a pre-existing, already-accepted decision for this
+// hackathon MVP, not something introduced by this migration) -- the flag
+// only matters on the project's separate (already non-functional) web
+// target, since React Native itself has no `window.document` to trigger it.
+const openai = new OpenAI({
   apiKey: env.anthropic.apiKey,
+  baseURL: env.anthropic.baseURL,
+  dangerouslyAllowBrowser: true,
 });
 
 // Message type
@@ -43,7 +60,7 @@ export interface ChatResponse<T = unknown> {
 }
 
 /**
- * Make a chat completion request to Claude
+ * Make a chat completion request to Claude (via the LiteLLM proxy)
  *
  * @param config - Chat configuration
  * @returns Parsed and validated response
@@ -74,22 +91,18 @@ export async function chat<T = unknown>(
         ]
       : messages;
 
-    // Make API call
-    const response = await anthropic.messages.create({
+    // OpenAI Chat Completions has no separate top-level `system` param --
+    // the system prompt is just the first message, with role 'system'.
+    const response = await openai.chat.completions.create({
       model: env.anthropic.model,
       max_tokens: maxTokens,
       temperature,
-      system: systemPrompt,
-      messages: enhancedMessages,
+      messages: [{ role: 'system', content: systemPrompt }, ...enhancedMessages],
     });
 
     endTimer();
 
-    // Extract text content
-    const textContent = response.content
-      .filter((block) => block.type === 'text')
-      .map((block) => (block as any).text)
-      .join('');
+    const textContent = response.choices[0]?.message?.content ?? '';
 
     logger.info('Claude response received', {
       model: env.anthropic.model,
@@ -103,8 +116,8 @@ export async function chat<T = unknown>(
         content: textContent,
         parsed,
         usage: {
-          inputTokens: response.usage.input_tokens,
-          outputTokens: response.usage.output_tokens,
+          inputTokens: response.usage?.prompt_tokens ?? 0,
+          outputTokens: response.usage?.completion_tokens ?? 0,
         },
       };
     }
@@ -113,8 +126,8 @@ export async function chat<T = unknown>(
     return {
       content: textContent,
       usage: {
-        inputTokens: response.usage.input_tokens,
-        outputTokens: response.usage.output_tokens,
+        inputTokens: response.usage?.prompt_tokens ?? 0,
+        outputTokens: response.usage?.completion_tokens ?? 0,
       },
     };
   } catch (error) {
@@ -186,21 +199,18 @@ export async function* chatStream(
   } = config;
 
   try {
-    const stream = await anthropic.messages.create({
+    const stream = await openai.chat.completions.create({
       model: env.anthropic.model,
       max_tokens: maxTokens,
       temperature,
-      system: systemPrompt,
-      messages,
+      messages: [{ role: 'system', content: systemPrompt }, ...messages],
       stream: true,
     });
 
-    for await (const event of stream) {
-      if (
-        event.type === 'content_block_delta' &&
-        event.delta.type === 'text_delta'
-      ) {
-        yield event.delta.text;
+    for await (const chunk of stream) {
+      const delta = chunk.choices[0]?.delta?.content;
+      if (delta) {
+        yield delta;
       }
     }
   } catch (error) {
