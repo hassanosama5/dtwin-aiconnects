@@ -96,15 +96,29 @@ export class CoordinatorAgent extends BaseAgent<
       this.logger.warning('Failed to save incoming question to conversation history', savedQuestion.error);
     }
 
-    const context = await loadDecisionContext(twinId, projectId);
+    const contextResult = await loadDecisionContext({
+      twinId,
+      projectId,
+      conversationHistory: [],
+      context: {},
+    });
+
+    if (!contextResult.success) {
+      throw new Error(contextResult.error);
+    }
 
     const decisionResult = await this.decisionAgent.execute(
-      { question: request.message, twinId, projectId },
-      context
+      {
+        question: request.message,
+        twinId,
+        projectId,
+        conversationHistory: contextResult.context.conversationHistory ?? [],
+      },
+      contextResult.context
     );
     const reviewResult = await this.reviewAgent.execute(
       { decision: decisionResult.output },
-      context
+      contextResult.context
     );
 
     if (reviewResult.output.approved) {

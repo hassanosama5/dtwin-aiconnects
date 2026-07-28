@@ -5,12 +5,15 @@
  * This keeps the hook thin and makes the pipeline testable.
  */
 
-import { decisionAgent } from '../../agents/decision';
-import { reviewAgent } from '../../agents/review';
+import { DecisionAgent } from '../../agents/decision';
+import { ReviewAgent } from '../../agents/review';
 import { loadDecisionContext } from '../../middleware/loadDecisionContext';
 import { saveMessage } from '../../tools/conversation';
-import type { DecisionRequest, DecisionResponse, ReviewRequest, ReviewResponse } from '../../types/agent';
+import type { DecisionRequest, DecisionResponse, ReviewResponse } from '../../types/agent';
 import { logger } from '../../utils/logger';
+
+const decisionAgent = new DecisionAgent();
+const reviewAgent = new ReviewAgent();
 
 export interface DecisionPipelineResult {
   decision: DecisionResponse;
@@ -24,15 +27,24 @@ export async function runDecisionPipeline(
   try {
     logger.agent('Service', 'Starting decision pipeline');
 
-    const contextResult = await loadDecisionContext(request);
+    const contextResult = await loadDecisionContext({
+      twinId: request.twinId,
+      projectId: request.projectId,
+      conversationHistory: request.conversationHistory,
+      context: {},
+    });
+
     if (!contextResult.success) {
       return contextResult;
     }
 
-    const decisionResult = await decisionAgent({
-      ...request,
-      conversationHistory: contextResult.context.conversationHistory,
-    });
+    const decisionResult = await decisionAgent.execute(
+      {
+        ...request,
+        conversationHistory: contextResult.context.conversationHistory ?? request.conversationHistory,
+      },
+      contextResult.context
+    );
 
     if (!decisionResult.success) {
       return {
@@ -41,13 +53,10 @@ export async function runDecisionPipeline(
       };
     }
 
-    const reviewRequest: ReviewRequest = {
-      decision: decisionResult.output,
-      personProfile: contextResult.context.personProfile as any,
-      projectProfile: contextResult.context.projectProfile as any,
-    };
-
-    const reviewResult = await reviewAgent(reviewRequest);
+    const reviewResult = await reviewAgent.execute(
+      { decision: decisionResult.output },
+      contextResult.context
+    );
 
     if (!reviewResult.success) {
       return {
