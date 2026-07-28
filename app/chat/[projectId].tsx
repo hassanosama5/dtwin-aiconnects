@@ -1,90 +1,70 @@
 /**
  * Chat Screen
  *
- * Conversational UI for asking a Decision Twin about a project.
- * Scripted mock conversation only — no agents, no backend.
- * Wiring to useChat() happens in Phase 3 (see ROADMAP.md).
+ * Conversational UI for asking a Decision Twin about a project. Wired to the
+ * real Coordinator -> Middleware -> Decision -> Review pipeline via
+ * useChat() -- no scripted responses, no fake timers. Conversation history
+ * and every new answer/escalation are real, persisted rows loaded through
+ * ConversationTool (see useChat.ts).
  */
 
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
-// See app/index.tsx -- react-native's own SafeAreaView is deprecated and
-// collapses to zero height under the New Architecture on iOS.
+import {
+  View,
+  Text,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
+  ActivityIndicator,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
-import { ChatBubble, ChatRole } from '../../components/chat/ChatBubble';
+import { ChatBubble } from '../../components/chat/ChatBubble';
 import { ConfidenceBadge } from '../../components/chat/ConfidenceBadge';
 import { ReasoningCard } from '../../components/chat/ReasoningCard';
-import { MOCK_PROJECTS } from '../project/[id]';
-
-interface MockChatMessage {
-  id: string;
-  role: ChatRole;
-  text: string;
-  confidence?: number;
-  reasoning?: string[];
-}
-
-interface ScriptedResponse {
-  text: string;
-  confidence: number;
-  reasoning: string[];
-}
-
-// Placeholder script — replace with the real Decision/Review Agent pipeline in Phase 3.
-// Cycles once the user sends more messages than the script has entries.
-const SCRIPTED_RESPONSES: ScriptedResponse[] = [
-  {
-    text: 'Based on your decision profile, delaying by one week reduces delivery risk while maintaining customer trust.',
-    confidence: 96,
-    reasoning: ['Customer impact', 'Risk assessment', 'Timeline considerations', 'Long-term value'],
-  },
-  {
-    text: 'That’s a safer option — it keeps the core release on schedule while still improving the experience later.',
-    confidence: 88,
-    reasoning: ['Scope isolation', 'Deadline impact', 'User experience', 'Team capacity'],
-  },
-  {
-    text: 'Unlikely — the security review covers backend changes, and this only touches onboarding UI.',
-    confidence: 74,
-    reasoning: ['Scope of security review', 'Component isolation', 'Historical precedent', 'Residual risk'],
-  },
-  {
-    text: 'Yes, this falls within standard delegation — no escalation needed for a UI-only scope change.',
-    confidence: 91,
-    reasoning: ['Delegation rules', 'Scope classification', 'Approval thresholds', 'Team precedent'],
-  },
-];
-
-const DEFAULT_PROJECT_ID = 'banking-app';
+import { AgentExecution } from '../../components/ui/AgentExecution';
+import { useChat } from '../../hooks/useChat';
+import { useAppStore, selectAgentExecution } from '../../store/appStore';
+import { theme } from '../../constants/theme';
 
 export default function ChatScreen() {
   const { projectId } = useLocalSearchParams<{ projectId: string }>();
-  const project = MOCK_PROJECTS[projectId ?? ''] ?? MOCK_PROJECTS[DEFAULT_PROJECT_ID];
-  const twinFirstName = project.twinName.split(' ')[0];
+  const {
+    project,
+    twin,
+    messages,
+    isInitializing,
+    isSending,
+    error,
+    sendMessage,
+    retry,
+  } = useChat(projectId ?? '');
+  const agentExecution = useAppStore(selectAgentExecution);
 
-  const [messages, setMessages] = useState<MockChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
-  const [responseIndex, setResponseIndex] = useState(0);
   const scrollRef = useRef<ScrollView>(null);
 
   useEffect(() => {
     scrollRef.current?.scrollToEnd({ animated: true });
-  }, [messages]);
+  }, [messages, isSending]);
+
+  const twinFirstName = (twin?.name ?? 'the Decision Twin').split(' ')[0];
 
   function handleSend() {
     const trimmed = inputText.trim();
-    if (!trimmed) return;
-
-    const response = SCRIPTED_RESPONSES[responseIndex % SCRIPTED_RESPONSES.length];
-    const userMessage: MockChatMessage = { id: `u${responseIndex}`, role: 'user', text: trimmed };
-    const aiMessage: MockChatMessage = { id: `a${responseIndex}`, role: 'ai', ...response };
-
-    setMessages((prev) => [...prev, userMessage, aiMessage]);
-    setResponseIndex((prev) => prev + 1);
+    if (!trimmed || isSending) return;
+    sendMessage(trimmed);
     setInputText('');
+  }
+
+  if (isInitializing) {
+    return (
+      <SafeAreaView className="flex-1 bg-white items-center justify-center">
+        <ActivityIndicator color={theme.colors.primary[600]} />
+      </SafeAreaView>
+    );
   }
 
   return (
@@ -97,17 +77,19 @@ export default function ChatScreen() {
         <View className="px-6 py-4 border-b border-gray-200">
           <View className="flex-row items-baseline gap-1.5">
             <Text className="text-sm font-medium text-gray-500">Project:</Text>
-            <Text className="text-base font-semibold text-gray-900">{project.name}</Text>
+            <Text className="text-base font-semibold text-gray-900">
+              {project?.name ?? 'Unknown project'}
+            </Text>
           </View>
           <View className="flex-row items-baseline gap-1.5 mt-0.5">
             <Text className="text-sm font-medium text-gray-500">Twin:</Text>
-            <Text className="text-base text-gray-700">{project.twinName}</Text>
+            <Text className="text-base text-gray-700">{twin?.name ?? 'Unknown twin'}</Text>
           </View>
         </View>
 
         {/* Conversation */}
         <ScrollView ref={scrollRef} className="flex-1">
-          {messages.length === 0 ? (
+          {messages.length === 0 && !isSending ? (
             <View className="flex-1 items-center justify-center p-10">
               <Text className="text-base text-gray-500 text-center">
                 Ask {twinFirstName} anything about this project.
@@ -118,10 +100,10 @@ export default function ChatScreen() {
               {messages.map((message) => (
                 <ChatBubble
                   key={message.id}
-                  role={message.role}
-                  message={message.text}
+                  role={message.role === 'user' ? 'user' : 'ai'}
+                  message={message.content}
                   footer={
-                    message.role === 'ai' ? (
+                    message.role !== 'user' ? (
                       <>
                         {message.confidence !== undefined && (
                           <ConfidenceBadge confidence={message.confidence} />
@@ -132,9 +114,24 @@ export default function ChatScreen() {
                   }
                 />
               ))}
+
+              <AgentExecution
+                state={agentExecution.state}
+                currentAgent={agentExecution.currentAgent}
+                progress={agentExecution.progress}
+              />
             </View>
           )}
         </ScrollView>
+
+        {error && (
+          <View className="px-6 pb-2">
+            <View className="flex-row items-center justify-between bg-red-50 border border-red-100 rounded-xl px-4 py-3">
+              <Text className="flex-1 text-sm text-red-600 mr-3">{error}</Text>
+              <Button title="Retry" size="sm" variant="secondary" onPress={retry} />
+            </View>
+          </View>
+        )}
 
         {/* Input */}
         <View className="flex-row items-end gap-2 px-4 py-3 bg-white border-t border-gray-200">
@@ -144,11 +141,12 @@ export default function ChatScreen() {
               onChangeText={setInputText}
               placeholder="Ask a question..."
               fullWidth={false}
+              editable={!isSending}
               onSubmitEditing={handleSend}
               returnKeyType="send"
             />
           </View>
-          <Button title="Send" onPress={handleSend} size="sm" />
+          <Button title="Send" onPress={handleSend} size="sm" disabled={isSending} />
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>

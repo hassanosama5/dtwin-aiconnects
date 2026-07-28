@@ -122,6 +122,7 @@ export class CoordinatorAgent extends BaseAgent<
 
     const context = await loadDecisionContext(twinId, projectId);
 
+    request.onStageChange?.('decision');
     const decisionResult = await this.decisionAgent.execute(
       { question: request.message, twinId, projectId },
       context
@@ -130,6 +131,7 @@ export class CoordinatorAgent extends BaseAgent<
       throw new Error(decisionResult.error ?? 'Decision Agent failed');
     }
 
+    request.onStageChange?.('review');
     const reviewResult = await this.reviewAgent.execute(
       { decision: decisionResult.output },
       context
@@ -137,6 +139,8 @@ export class CoordinatorAgent extends BaseAgent<
     if (!reviewResult.success) {
       throw new Error(reviewResult.error ?? 'Review Agent failed');
     }
+
+    request.onStageChange?.('complete');
 
     if (reviewResult.output.approved) {
       const saved = await ConversationTool.save(projectId, 'assistant', decisionResult.output.answer, {

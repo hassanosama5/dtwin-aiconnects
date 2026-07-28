@@ -16,13 +16,16 @@ import Animated, {
 } from 'react-native-reanimated';
 import { AgentExecutionState } from '../../types/agent';
 import { theme } from '../../constants/theme';
+import { ProgressBar } from '../chat/ProgressBar';
 
 interface AgentExecutionProps {
   state: AgentExecutionState;
   currentAgent?: string;
+  /** 0-100, from store/appStore.ts's agentExecution.progress. */
+  progress?: number;
 }
 
-export function AgentExecution({ state, currentAgent }: AgentExecutionProps) {
+export function AgentExecution({ state, currentAgent, progress = 0 }: AgentExecutionProps) {
   // Animation values for each agent node
   const coordinatorOpacity = useSharedValue(0.3);
   const decisionOpacity = useSharedValue(0.3);
@@ -97,6 +100,10 @@ export function AgentExecution({ state, currentAgent }: AgentExecutionProps) {
 
   return (
     <View className="py-4 px-6">
+      {state !== 'complete' && state !== 'error' && (
+        <ProgressBar label="Running" collected={progress} total={100} />
+      )}
+
       <View className="flex-col items-center">
         {/* Coordinator Node */}
         <Animated.View

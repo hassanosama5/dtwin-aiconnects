@@ -37,6 +37,13 @@ export interface CoordinatorRequest {
     twinId?: string;
     projectId?: string;
   };
+  // Invoked synchronously as the CHAT workflow's pipeline actually
+  // progresses (Decision starting, Review starting, pipeline complete) --
+  // lets a caller (e.g. useChat) drive live UI state instead of guessing
+  // timings. The Coordinator's own classification stage isn't reported here
+  // since the caller already knows it's about to call execute(). Ignored
+  // for non-CHAT workflows.
+  onStageChange?: (stage: 'decision' | 'review' | 'complete') => void;
 }
 
 // Raw classification output validated against the Coordinator's own LLM call.
