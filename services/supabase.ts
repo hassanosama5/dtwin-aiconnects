@@ -5,17 +5,24 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { env } from '../config/env';
 import { Database } from '../types/database';
 import { logger } from '../utils/logger';
 
-// Create Supabase client with type safety
+// Create Supabase client with type safety. AsyncStorage is required for
+// persistent sessions on React Native -- supabase-js defaults to
+// `localStorage`, which doesn't exist here, so persistSession would
+// silently no-op without an explicit storage adapter.
 export const supabase = createClient<Database>(
   env.supabase.url,
   env.supabase.anonKey,
   {
     auth: {
-      persistSession: false, // No auth for MVP
+      storage: AsyncStorage,
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: false,
     },
   }
 );

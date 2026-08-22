@@ -7,6 +7,7 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, Animated } from 'react-native';
 import { TypingIndicator } from './TypingIndicator';
+import { theme } from '../../constants/theme';
 
 export type ChatRole = 'ai' | 'user';
 
@@ -45,11 +46,12 @@ export function ChatBubble({ role, message, typing, typingLabel, fadeOut, footer
 
   return (
     <Animated.View style={{ opacity, transform: [{ translateY }] }}>
-      <View className={`mb-3 max-w-[80%] ${isUser ? 'self-end' : 'self-start'}`}>
+      <View className={`mb-3.5 max-w-[80%] ${isUser ? 'self-end' : 'self-start'}`}>
         <View
-          className={`rounded-2xl px-4 py-3 ${
-            isUser ? 'bg-primary-600 rounded-br-md' : 'bg-gray-100 rounded-bl-md'
+          className={`rounded-3xl px-4 py-3.5 ${
+            isUser ? 'bg-primary-600 rounded-br-lg' : 'bg-gray-100 rounded-bl-lg'
           }`}
+          style={!isUser ? theme.shadows.sm : undefined}
         >
           {typing ? (
             <View>
@@ -59,7 +61,7 @@ export function ChatBubble({ role, message, typing, typingLabel, fadeOut, footer
               <TypingIndicator />
             </View>
           ) : (
-            <Text className={`text-base leading-5 ${isUser ? 'text-white' : 'text-gray-900'}`}>
+            <Text className={`text-base leading-6 ${isUser ? 'text-white' : 'text-ink-900'}`}>
               {message}
             </Text>
           )}

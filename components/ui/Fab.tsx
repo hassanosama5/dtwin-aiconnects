@@ -7,7 +7,9 @@
  */
 
 import React, { useRef } from 'react';
-import { Animated, Pressable, Text } from 'react-native';
+import { Animated, Pressable } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { theme } from '../../constants/theme';
 
 interface FabProps {
   onPress: () => void;
@@ -40,11 +42,8 @@ export function Fab({ onPress, accessibilityLabel = 'Create' }: FabProps) {
         position: 'absolute',
         right: 20,
         bottom: 24,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.2,
-        shadowRadius: 8,
-        elevation: 6,
+        ...theme.shadows.lg,
+        shadowOpacity: 0.2, // slightly stronger than the default lg preset — FAB floats over content
       }}
     >
       <Pressable
@@ -56,9 +55,7 @@ export function Fab({ onPress, accessibilityLabel = 'Create' }: FabProps) {
         hitSlop={8}
         className="w-14 h-14 rounded-full items-center justify-center bg-primary-600"
       >
-        <Text className="text-white text-3xl" style={{ marginTop: -2 }}>
-          +
-        </Text>
+        <Ionicons name="add" size={26} color={theme.colors.textInverse} />
       </Pressable>
     </Animated.View>
   );

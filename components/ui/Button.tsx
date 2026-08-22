@@ -47,7 +47,7 @@ export function Button({
       case 'primary':
         return 'bg-primary-600 border-primary-600';
       case 'secondary':
-        return 'bg-white border-gray-300';
+        return 'bg-surface-high border-surface-border';
       case 'ghost':
         return 'bg-transparent border-transparent';
     }
@@ -58,7 +58,7 @@ export function Button({
       case 'primary':
         return 'text-white';
       case 'secondary':
-        return 'text-gray-900';
+        return 'text-on-surface';
       case 'ghost':
         return 'text-primary-600';
     }
@@ -98,7 +98,7 @@ export function Button({
           ${getVariantStyles()}
           ${getSizeStyles()}
           ${fullWidth ? 'w-full' : ''}
-          rounded-lg
+          rounded-xl
           border
           flex-row
           items-center
@@ -109,7 +109,7 @@ export function Button({
         {loading ? (
           <ActivityIndicator
             size="small"
-            color={variant === 'primary' ? '#ffffff' : theme.colors.primary[600]}
+            color={variant === 'primary' ? theme.colors.textInverse : theme.colors.primary[600]}
           />
         ) : (
           <View className="flex-row items-center gap-2">

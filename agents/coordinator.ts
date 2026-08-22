@@ -115,7 +115,7 @@ export class CoordinatorAgent extends BaseAgent<
       throw new Error('CHAT workflow requires both twinId and projectId in context');
     }
 
-    const savedQuestion = await ConversationTool.save(projectId, 'user', request.message);
+    const savedQuestion = await ConversationTool.save(projectId, 'user', request.message, { twinId });
     if (!savedQuestion.success) {
       this.logger.warning('Failed to save incoming question to conversation history', savedQuestion.error);
     }
@@ -146,6 +146,7 @@ export class CoordinatorAgent extends BaseAgent<
       const saved = await ConversationTool.save(projectId, 'assistant', decisionResult.output.answer, {
         reasoning: decisionResult.output.reasoning,
         confidence: decisionResult.output.confidence,
+        twinId,
       });
       if (!saved.success) {
         this.logger.warning('Failed to save approved answer to conversation history', saved.error);
@@ -156,6 +157,7 @@ export class CoordinatorAgent extends BaseAgent<
       const saved = await ConversationTool.save(projectId, 'assistant', notice, {
         confidence: reviewResult.output.confidence,
         requiresHuman: true,
+        twinId,
       });
       if (!saved.success) {
         this.logger.warning('Failed to save escalation notice to conversation history', saved.error);

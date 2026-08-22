@@ -46,7 +46,7 @@ export interface UseChatResult {
   retry: () => void;
 }
 
-export function useChat(projectId: string): UseChatResult {
+export function useChat(projectId: string, twinId: string): UseChatResult {
   const setAgentExecution = useAppStore((s) => s.setAgentExecution);
   const resetAgentExecution = useAppStore((s) => s.resetAgentExecution);
 
@@ -57,7 +57,6 @@ export function useChat(projectId: string): UseChatResult {
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const twinIdRef = useRef<string | undefined>(undefined);
   const lastFailedMessageRef = useRef<string | null>(null);
   const loadFailedRef = useRef(false);
   const resetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -102,21 +101,12 @@ export function useChat(projectId: string): UseChatResult {
     setError(null);
     loadFailedRef.current = false;
 
-    const projectResult = await ProjectTool.get(projectId);
-    if (!isMountedRef.current) return;
-
-    if (!projectResult.success) {
-      setError(projectResult.error);
-      loadFailedRef.current = true;
-      setIsInitializing(false);
-      return;
-    }
-
-    setProject(projectResult.project);
-    twinIdRef.current = projectResult.project.twin_id;
-
-    const [twinResult, historyResult] = await Promise.all([
-      ProfileTool.get(projectResult.project.twin_id),
+    // twinId arrives explicit from the caller now (chosen at chat-time via
+    // a Twin/Project picker) rather than derived from project.twin_id --
+    // a Project no longer belongs to one fixed Twin, see tools/project.ts.
+    const [projectResult, twinResult, historyResult] = await Promise.all([
+      ProjectTool.get(projectId),
+      ProfileTool.get(twinId),
       ConversationTool.getHistory(projectId),
     ]);
     if (!isMountedRef.current) return;
@@ -128,10 +118,20 @@ export function useChat(projectId: string): UseChatResult {
     // everything rather than leaving the screen half-populated.
     let hasLoadError = false;
 
+    if (projectResult.success) {
+      setProject(projectResult.project);
+    } else {
+      setError(projectResult.error);
+      loadFailedRef.current = true;
+      hasLoadError = true;
+    }
+
     if (twinResult.success) {
       setTwin(twinResult.twin);
     } else {
-      setError(twinResult.error);
+      if (!hasLoadError) {
+        setError(twinResult.error);
+      }
       loadFailedRef.current = true;
       hasLoadError = true;
     }
@@ -146,7 +146,7 @@ export function useChat(projectId: string): UseChatResult {
     }
 
     setIsInitializing(false);
-  }, [projectId]);
+  }, [projectId, twinId]);
 
   useEffect(() => {
     void loadContext();
@@ -161,13 +161,6 @@ export function useChat(projectId: string): UseChatResult {
 
   const runTurn = useCallback(
     async (content: string) => {
-      const twinId = twinIdRef.current;
-      if (!twinId) {
-        setError('Project context is still loading. Please wait a moment and try again.');
-        isSendingRef.current = false;
-        return;
-      }
-
       clearPendingReset();
       setIsSending(true);
       setError(null);
@@ -232,7 +225,7 @@ export function useChat(projectId: string): UseChatResult {
         }
       }
     },
-    [projectId, setAgentExecution, clearPendingReset, scheduleReset]
+    [projectId, twinId, setAgentExecution, clearPendingReset, scheduleReset]
   );
 
   // Issue 2: the single place a turn is allowed to start. Claims the ref

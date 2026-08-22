@@ -234,11 +234,15 @@ export class InterviewAgent extends BaseAgent<
       };
     }
 
-    if (!request.twinId) {
-      throw new Error('Cannot save a project profile without a twinId');
-    }
+    // Note: the UI no longer drives project creation through this agent --
+    // Projects are an independent workspace filled in via a plain form (see
+    // app/project/create.tsx and tools/project.ts's doc comment) rather
+    // than a Twin-style interview. This branch is kept working and
+    // internally consistent with the current ProjectProfile shape, not
+    // deleted, per "don't change agent architecture" -- it's simply unused
+    // by the app today.
     const profile = collected as unknown as ProjectProfile;
-    const saveResult = await ProjectTool.save(request.twinId, profile.name, profile);
+    const saveResult = await ProjectTool.save(profile, request.twinId);
     if (!saveResult.success) {
       throw new Error(saveResult.error);
     }

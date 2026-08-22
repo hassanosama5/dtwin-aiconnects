@@ -37,9 +37,9 @@ function Chip({ label, delay, onPress, disabled }: ChipProps) {
         onPress={onPress}
         disabled={disabled}
         activeOpacity={0.7}
-        className="border border-gray-200 bg-white rounded-full px-4 py-2 mr-2"
+        className="border border-primary-100 bg-primary-50 rounded-full px-4 py-2 mr-2"
       >
-        <Text className="text-sm text-gray-700 font-medium">{label}</Text>
+        <Text className="text-sm text-primary-700 font-medium">{label}</Text>
       </TouchableOpacity>
     </Animated.View>
   );
@@ -58,14 +58,14 @@ export function SuggestionChips({ suggestions, onSelect, disabled = false }: Sug
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
-      className="px-5 pb-2"
+      className="px-5 pt-3 pb-2.5"
       contentContainerStyle={{ paddingRight: 12 }}
     >
       {suggestions.map((suggestion, index) => (
         <Chip
           key={suggestion}
           label={suggestion}
-          delay={index * 60}
+          delay={index * 40}
           disabled={disabled}
           onPress={() => onSelect(suggestion)}
         />

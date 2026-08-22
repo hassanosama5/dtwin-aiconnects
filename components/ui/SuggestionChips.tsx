@@ -21,8 +21,8 @@ export function SuggestionChips({ suggestions, onSelect }: SuggestionChipsProps)
     <View className="flex-row flex-wrap gap-2 mt-3">
       {suggestions.map((suggestion) => (
         <PressableScale key={suggestion} onPress={() => onSelect(suggestion)}>
-          <View className="bg-gray-100 border border-gray-200 rounded-full px-4 py-2.5">
-            <Text className="text-sm text-gray-700">{suggestion}</Text>
+          <View className="bg-primary-50 border border-primary-100 rounded-full px-4 py-2.5">
+            <Text className="text-sm text-primary-700 font-medium">{suggestion}</Text>
           </View>
         </PressableScale>
       ))}

@@ -9,6 +9,8 @@
 import React, { useEffect } from 'react';
 import { View, Text } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming } from 'react-native-reanimated';
+import { LinearGradient } from 'expo-linear-gradient';
+import { theme } from '../../constants/theme';
 
 interface ProgressBarProps {
   label: string;
@@ -29,15 +31,22 @@ export function ProgressBar({ label, collected, total }: ProgressBarProps) {
   }));
 
   return (
-    <View className="px-6 pt-3 pb-2">
-      <View className="flex-row justify-between mb-1.5">
-        <Text className="text-xs font-medium text-gray-500">{label}</Text>
-        <Text className="text-xs text-gray-400">
+    <View className="px-6 pt-3 pb-2.5">
+      <View className="flex-row justify-between mb-2">
+        <Text className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{label}</Text>
+        <Text className="text-xs font-medium text-gray-400">
           {Math.min(collected, total)} of {total}
         </Text>
       </View>
-      <View className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
-        <Animated.View style={fillStyle} className="h-full rounded-full bg-primary-500" />
+      <View className="h-2 rounded-full bg-gray-100 overflow-hidden">
+        <Animated.View style={[fillStyle, { height: '100%' }]}>
+          <LinearGradient
+            colors={[theme.colors.gradient.from, theme.colors.gradient.to]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={{ flex: 1, borderRadius: 9999 }}
+          />
+        </Animated.View>
       </View>
     </View>
   );

@@ -33,7 +33,7 @@ export function BulletList({ items }: BulletListProps) {
     <View className="gap-2">
       {items.map((item, index) => (
         <View key={index} className="flex-row items-start">
-          <Text className="text-gray-400 text-sm mr-2">{'•'}</Text>
+          <Text className="text-primary-400 text-sm mr-2">{'•'}</Text>
           <Text className="flex-1 text-sm text-gray-600 leading-5">{item}</Text>
         </View>
       ))}

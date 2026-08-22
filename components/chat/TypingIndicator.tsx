@@ -8,6 +8,7 @@
 
 import React, { useEffect, useRef } from 'react';
 import { View, Animated } from 'react-native';
+import { theme } from '../../constants/theme';
 
 function useDotAnimation(delay: number) {
   const value = useRef(new Animated.Value(0)).current;
@@ -38,7 +39,7 @@ function Dot({ delay }: { delay: number }) {
         width: 6,
         height: 6,
         borderRadius: 3,
-        backgroundColor: '#9ca3af',
+        backgroundColor: theme.colors.gray[400],
         marginHorizontal: 2,
         opacity: value.interpolate({ inputRange: [0, 1], outputRange: [0.4, 1] }),
         transform: [{ translateY }],

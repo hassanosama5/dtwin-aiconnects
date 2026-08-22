@@ -26,11 +26,11 @@ export function Card({
   const getVariantStyles = () => {
     switch (variant) {
       case 'default':
-        return `bg-white border border-gray-200 ${elevated ? 'shadow-sm' : ''}`;
+        return `bg-surface border border-surface-border ${elevated ? 'shadow-sm' : ''}`;
       case 'bordered':
-        return 'bg-white border border-gray-300';
+        return 'bg-surface border border-surface-border';
       case 'flat':
-        return 'bg-gray-50';
+        return 'bg-surface-high';
     }
   };
 

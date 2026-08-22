@@ -19,20 +19,18 @@ export interface PersonProfile {
   generalPrinciples?: string[];
 }
 
-// Project Profile (stored as JSONB)
+// Project Profile (stored as JSONB) -- a Project is an independent
+// workspace, not a Twin-style decision profile. No agent/interview is
+// involved in producing this; it's filled in directly via a plain form
+// (app/project/create.tsx).
 export interface ProjectProfile {
-  name: string;
-  description?: string;
-  goal: string;
-  timeline?: string;
-  priorities: string[];
-  constraints: string[];
-  decisionRules: string[];
-  escalationRules: string[];
-  tradeoffs?: string[];
-  currentChallenges?: string[];
+  title: string;
+  description: string;
+  objectives: string[];
+  deadline?: string;
   stakeholders?: string[];
-  successMetrics?: string[];
+  constraints: string[];
+  notes?: string;
 }
 
 // Helper types

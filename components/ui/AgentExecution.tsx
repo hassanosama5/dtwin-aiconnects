@@ -7,11 +7,13 @@
 
 import React, { useEffect } from 'react';
 import { View, Text } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
   withSequence,
+  withRepeat,
   Easing,
 } from 'react-native-reanimated';
 import { AgentExecutionState } from '../../types/agent';
@@ -25,75 +27,71 @@ interface AgentExecutionProps {
   progress?: number;
 }
 
-export function AgentExecution({ state, currentAgent, progress = 0 }: AgentExecutionProps) {
-  // Animation values for each agent node
-  const coordinatorOpacity = useSharedValue(0.3);
-  const decisionOpacity = useSharedValue(0.3);
-  const reviewOpacity = useSharedValue(0.3);
+type NodeState = 'pending' | 'active' | 'done';
 
-  // Update animations based on current state
+const NODES: { key: 'coordinator' | 'decision' | 'review'; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+  { key: 'coordinator', label: 'Coordinator', icon: 'git-network-outline' },
+  { key: 'decision', label: 'Decision', icon: 'bulb-outline' },
+  { key: 'review', label: 'Review', icon: 'shield-checkmark-outline' },
+];
+
+const ORDER: Record<string, number> = { coordinator: 0, decision: 1, review: 2, complete: 3 };
+
+function nodeState(nodeKey: string, state: AgentExecutionState): NodeState {
+  if (state === 'error' || state === 'idle') return 'pending';
+  const current = ORDER[state] ?? 0;
+  const nodeIndex = ORDER[nodeKey];
+  if (current > nodeIndex) return 'done';
+  if (current === nodeIndex) return 'active';
+  return 'pending';
+}
+
+function Node({ label, icon, status }: { label: string; icon: keyof typeof Ionicons.glyphMap; status: NodeState }) {
+  const scale = useSharedValue(1);
+  const opacity = useSharedValue(0.4);
+
   useEffect(() => {
-    switch (state) {
-      case 'idle':
-        coordinatorOpacity.value = withTiming(0.3, { duration: 200 });
-        decisionOpacity.value = withTiming(0.3, { duration: 200 });
-        reviewOpacity.value = withTiming(0.3, { duration: 200 });
-        break;
-
-      case 'coordinator':
-        coordinatorOpacity.value = withSequence(
-          withTiming(1, { duration: 300, easing: Easing.ease }),
-          withTiming(0.8, { duration: 200 })
-        );
-        decisionOpacity.value = withTiming(0.3, { duration: 200 });
-        reviewOpacity.value = withTiming(0.3, { duration: 200 });
-        break;
-
-      case 'decision':
-        coordinatorOpacity.value = withTiming(0.5, { duration: 200 });
-        decisionOpacity.value = withSequence(
-          withTiming(1, { duration: 300, easing: Easing.ease }),
-          withTiming(0.8, { duration: 200 })
-        );
-        reviewOpacity.value = withTiming(0.3, { duration: 200 });
-        break;
-
-      case 'review':
-        coordinatorOpacity.value = withTiming(0.5, { duration: 200 });
-        decisionOpacity.value = withTiming(0.5, { duration: 200 });
-        reviewOpacity.value = withSequence(
-          withTiming(1, { duration: 300, easing: Easing.ease }),
-          withTiming(0.8, { duration: 200 })
-        );
-        break;
-
-      case 'complete':
-        coordinatorOpacity.value = withTiming(1, { duration: 300 });
-        decisionOpacity.value = withTiming(1, { duration: 300 });
-        reviewOpacity.value = withTiming(1, { duration: 300 });
-        break;
-
-      case 'error':
-        coordinatorOpacity.value = withTiming(0.3, { duration: 200 });
-        decisionOpacity.value = withTiming(0.3, { duration: 200 });
-        reviewOpacity.value = withTiming(0.3, { duration: 200 });
-        break;
+    if (status === 'active') {
+      opacity.value = withTiming(1, { duration: 250, easing: Easing.ease });
+      scale.value = withRepeat(
+        withSequence(
+          withTiming(1.04, { duration: 500, easing: Easing.ease }),
+          withTiming(1, { duration: 500, easing: Easing.ease })
+        ),
+        -1,
+        true
+      );
+    } else if (status === 'done') {
+      scale.value = withTiming(1, { duration: 150 });
+      opacity.value = withTiming(1, { duration: 200 });
+    } else {
+      scale.value = withTiming(1, { duration: 150 });
+      opacity.value = withTiming(0.4, { duration: 200 });
     }
-  }, [state]);
+  }, [status]);
 
-  // Animated styles
-  const coordinatorStyle = useAnimatedStyle(() => ({
-    opacity: coordinatorOpacity.value,
+  const animatedStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    transform: [{ scale: scale.value }],
   }));
 
-  const decisionStyle = useAnimatedStyle(() => ({
-    opacity: decisionOpacity.value,
-  }));
+  const bg = status === 'pending' ? 'bg-gray-100' : 'bg-primary-50';
+  const border = status === 'pending' ? 'border-gray-200' : 'border-primary-300';
+  const text = status === 'pending' ? theme.colors.gray[400] : theme.colors.primary[600];
 
-  const reviewStyle = useAnimatedStyle(() => ({
-    opacity: reviewOpacity.value,
-  }));
+  return (
+    <Animated.View style={animatedStyle} className="flex-row items-center">
+      <View className={`flex-row items-center gap-2 rounded-full px-4 py-2 border ${bg} ${border}`}>
+        <Ionicons name={status === 'done' ? 'checkmark-circle' : icon} size={15} color={text} />
+        <Text style={{ color: text }} className="font-medium text-sm">
+          {label}
+        </Text>
+      </View>
+    </Animated.View>
+  );
+}
 
+export function AgentExecution({ state, currentAgent, progress = 0 }: AgentExecutionProps) {
   if (state === 'idle') {
     return null;
   }
@@ -105,47 +103,22 @@ export function AgentExecution({ state, currentAgent, progress = 0 }: AgentExecu
       )}
 
       <View className="flex-col items-center">
-        {/* Coordinator Node */}
-        <Animated.View
-          style={[coordinatorStyle]}
-          className="flex-row items-center"
-        >
-          <View className="bg-primary-100 rounded-full px-4 py-2 border border-primary-300">
-            <Text className="text-primary-700 font-medium text-sm">
-              Coordinator
-            </Text>
-          </View>
-        </Animated.View>
-
-        {/* Arrow */}
-        <View className="h-6 w-px bg-gray-300 my-1" />
-
-        {/* Decision Node */}
-        <Animated.View
-          style={[decisionStyle]}
-          className="flex-row items-center"
-        >
-          <View className="bg-primary-100 rounded-full px-4 py-2 border border-primary-300">
-            <Text className="text-primary-700 font-medium text-sm">
-              Decision
-            </Text>
-          </View>
-        </Animated.View>
-
-        {/* Arrow */}
-        <View className="h-6 w-px bg-gray-300 my-1" />
-
-        {/* Review Node */}
-        <Animated.View
-          style={[reviewStyle]}
-          className="flex-row items-center"
-        >
-          <View className="bg-primary-100 rounded-full px-4 py-2 border border-primary-300">
-            <Text className="text-primary-700 font-medium text-sm">
-              Review
-            </Text>
-          </View>
-        </Animated.View>
+        {NODES.map((node, index) => {
+          const status = nodeState(node.key, state);
+          const nextStatus = index < NODES.length - 1 ? nodeState(NODES[index + 1].key, state) : null;
+          return (
+            <React.Fragment key={node.key}>
+              <Node label={node.label} icon={node.icon} status={status} />
+              {nextStatus && (
+                <View
+                  className={`h-6 w-px my-1 ${
+                    status === 'done' ? 'bg-primary-300' : 'bg-gray-200'
+                  }`}
+                />
+              )}
+            </React.Fragment>
+          );
+        })}
       </View>
 
       {/* Status text */}

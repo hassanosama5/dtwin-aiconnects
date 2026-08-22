@@ -22,7 +22,13 @@ export async function savePersonProfile(
   try {
     logger.info('Saving person profile', { name, role });
 
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (userError || !userData.user) {
+      throw new Error('Must be signed in to create a Decision Twin');
+    }
+
     const twinData: TwinInsert = {
+      owner_id: userData.user.id,
       name,
       role,
       avatar_url: avatarUrl || null,

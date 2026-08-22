@@ -25,7 +25,7 @@ export function Input({
   return (
     <View className={`${fullWidth ? 'w-full' : ''}`}>
       {label && (
-        <Text className="text-sm font-medium text-gray-700 mb-2">
+        <Text className="text-sm font-medium text-on-surface-variant mb-2">
           {label}
         </Text>
       )}
@@ -33,8 +33,8 @@ export function Input({
       <TextInput
         className={`
           border
-          ${error ? 'border-red-500' : 'border-gray-300'}
-          bg-white
+          ${error ? 'border-red-500' : 'border-surface-border'}
+          bg-surface
           rounded-lg
           px-4
           py-3

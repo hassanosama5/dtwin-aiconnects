@@ -15,14 +15,19 @@ interface EmptyStateProps {
   description?: string;
   actionLabel?: string;
   onAction?: () => void;
+  /** Optional brand moment above the title — e.g. <BrandMark />. Left out
+   *  for smaller/contextual empty states (e.g. "not found") where a logo
+   *  would feel out of place. */
+  icon?: React.ReactNode;
   /** Optional extra content rendered below the title/description/action (e.g. suggestion chips). */
   children?: React.ReactNode;
 }
 
-export function EmptyState({ title, description, actionLabel, onAction, children }: EmptyStateProps) {
+export function EmptyState({ title, description, actionLabel, onAction, icon, children }: EmptyStateProps) {
   return (
     <View className="flex-1 items-center justify-center p-6">
-      <Text className="text-lg font-semibold text-gray-900 text-center mb-2">{title}</Text>
+      {icon && <View className="mb-4">{icon}</View>}
+      <Text className="text-lg font-semibold text-ink-900 text-center mb-2">{title}</Text>
       {description && (
         <Text className="text-sm text-gray-500 text-center mb-6">{description}</Text>
       )}

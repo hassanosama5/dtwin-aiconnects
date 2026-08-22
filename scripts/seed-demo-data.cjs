@@ -32,8 +32,11 @@
  * project doesn't already have any messages. Re-running never creates
  * duplicates.
  *
- * Usage:
- *   node scripts/seed-demo-data.cjs
+ * Usage (requires a real, already-signed-up account -- RLS scopes every
+ * row to owner_id = auth.uid(), so an anonymous client can't insert
+ * anything; seeded rows end up owned by whichever account you provide):
+ *   SEED_USER_EMAIL=you@example.com SEED_USER_PASSWORD=yourpassword node scripts/seed-demo-data.cjs
+ * (or add SEED_USER_EMAIL / SEED_USER_PASSWORD to .env instead of the inline env vars)
  */
 
 const fs = require('fs');
@@ -92,16 +95,13 @@ const DEMO_TWINS = [
       name: 'Banking App',
       description: 'Core banking application MVP.',
       projectProfile: {
-        name: 'Banking App',
+        title: 'Banking App',
         description: 'Core banking application MVP.',
-        goal: 'Ship MVP',
-        timeline: 'Fixed deadline, two weeks remaining',
-        priorities: ['Security', 'Performance'],
+        objectives: ['Ship MVP', 'Pass regulatory compliance review'],
+        deadline: 'Fixed deadline, two weeks remaining',
+        stakeholders: ['Compliance team', 'Security team'],
         constraints: ['Fixed Deadline', 'Regulatory compliance'],
-        decisionRules: ['Delay only for security issues.'],
-        escalationRules: ['Budget changes'],
-        tradeoffs: ['UI polish can slip; security cannot.'],
-        currentChallenges: ['Onboarding flow needs animation polish.'],
+        notes: 'Delay only for security issues. UI polish can slip; security cannot.',
       },
       conversation: [
         {
@@ -149,16 +149,14 @@ const DEMO_TWINS = [
       name: 'AI Dashboard',
       description: 'Internal analytics dashboard powered by AI insights.',
       projectProfile: {
-        name: 'AI Dashboard',
+        title: 'AI Dashboard',
         description: 'Internal analytics dashboard powered by AI insights.',
-        goal: 'Deliver a usable v1 dashboard for the ops team',
-        timeline: 'Flexible, targeting end of quarter',
-        priorities: ['Usability', 'Data Accuracy'],
+        objectives: ['Deliver a usable v1 dashboard for the ops team'],
+        deadline: 'Flexible, targeting end of quarter',
+        stakeholders: ['Ops team'],
         constraints: ['Limited engineering headcount'],
-        decisionRules: ['New features must not compromise data accuracy.'],
-        escalationRules: ['Scope changes affecting the deadline'],
-        tradeoffs: ['Fewer chart types now in exchange for reliable data pipelines.'],
-        currentChallenges: ['Third-party data source has intermittent latency.'],
+        notes:
+          'New features must not compromise data accuracy. Third-party data source has intermittent latency.',
       },
       conversation: [
         {
@@ -197,8 +195,14 @@ const summary = {
   messagesSkippedProjects: 0,
 };
 
-async function findOrCreateTwin(supabase, name, role, personalProfile) {
-  const existing = await supabase.from('twins').select('*').eq('name', name).eq('role', role).maybeSingle();
+async function findOrCreateTwin(supabase, ownerId, name, role, personalProfile) {
+  const existing = await supabase
+    .from('twins')
+    .select('*')
+    .eq('owner_id', ownerId)
+    .eq('name', name)
+    .eq('role', role)
+    .maybeSingle();
   if (existing.error) {
     throw new Error(`Failed to look up twin "${name}": ${existing.error.message}`);
   }
@@ -209,7 +213,7 @@ async function findOrCreateTwin(supabase, name, role, personalProfile) {
 
   const inserted = await supabase
     .from('twins')
-    .insert([{ name, role, avatar_url: null, personal_profile: personalProfile }])
+    .insert([{ owner_id: ownerId, name, role, avatar_url: null, personal_profile: personalProfile }])
     .select()
     .single();
   if (inserted.error) {
@@ -219,11 +223,14 @@ async function findOrCreateTwin(supabase, name, role, personalProfile) {
   return inserted.data;
 }
 
-async function findOrCreateProject(supabase, twinId, name, description, projectProfile) {
+// Projects are independent of Twins now (see tools/project.ts) -- twinId is
+// only seeded as an optional "default twin" hint, and lookups/idempotency
+// are keyed on (owner_id, name), not twin_id.
+async function findOrCreateProject(supabase, ownerId, twinId, name, description, projectProfile) {
   const existing = await supabase
     .from('projects')
     .select('*')
-    .eq('twin_id', twinId)
+    .eq('owner_id', ownerId)
     .eq('name', name)
     .maybeSingle();
   if (existing.error) {
@@ -236,7 +243,7 @@ async function findOrCreateProject(supabase, twinId, name, description, projectP
 
   const inserted = await supabase
     .from('projects')
-    .insert([{ twin_id: twinId, name, description, project_profile: projectProfile }])
+    .insert([{ owner_id: ownerId, twin_id: twinId, name, description, project_profile: projectProfile }])
     .select()
     .single();
   if (inserted.error) {
@@ -300,6 +307,32 @@ async function main() {
     auth: { persistSession: false },
   });
 
+  // RLS now scopes every row to owner_id = auth.uid() (see
+  // supabase/migrations/002_auth_and_ownership.sql) -- an anonymous client
+  // has no auth.uid() at all, so it cannot insert anything, regardless of
+  // what owner_id value is passed. This must sign in as a real account
+  // first; seeded rows are owned by whichever account you provide.
+  const seedEmail = env.SEED_USER_EMAIL || process.env.SEED_USER_EMAIL;
+  const seedPassword = env.SEED_USER_PASSWORD || process.env.SEED_USER_PASSWORD;
+  if (!seedEmail || !seedPassword) {
+    console.error(
+      'Missing SEED_USER_EMAIL / SEED_USER_PASSWORD.\n' +
+        'Sign up a real account in the app first, then run:\n' +
+        '  SEED_USER_EMAIL=you@example.com SEED_USER_PASSWORD=yourpassword node scripts/seed-demo-data.cjs\n' +
+        '(or add those two lines to .env). Demo data is seeded as owned by that account.'
+    );
+    process.exit(1);
+    return;
+  }
+
+  const signIn = await supabase.auth.signInWithPassword({ email: seedEmail, password: seedPassword });
+  if (signIn.error || !signIn.data.user) {
+    console.error(`Could not sign in as ${seedEmail}: ${signIn.error?.message ?? 'no user returned'}`);
+    process.exit(1);
+    return;
+  }
+  const ownerId = signIn.data.user.id;
+
   try {
     const connectionCheck = await supabase.from('twins').select('id').limit(1);
     if (connectionCheck.error) {
@@ -308,7 +341,7 @@ async function main() {
   } catch (err) {
     console.error(`Could not establish a Supabase connection: ${err.message}`);
     console.error(
-      'Check EXPO_PUBLIC_SUPABASE_URL / EXPO_PUBLIC_SUPABASE_ANON_KEY in .env, and confirm the migration in supabase/migrations/001_initial_schema.sql has been applied to this project.'
+      'Check EXPO_PUBLIC_SUPABASE_URL / EXPO_PUBLIC_SUPABASE_ANON_KEY in .env, and confirm every migration in supabase/migrations/ has been applied to this project.'
     );
     process.exit(1);
     return;
@@ -316,9 +349,10 @@ async function main() {
 
   try {
     for (const demoTwin of DEMO_TWINS) {
-      const twin = await findOrCreateTwin(supabase, demoTwin.name, demoTwin.role, demoTwin.personalProfile);
+      const twin = await findOrCreateTwin(supabase, ownerId, demoTwin.name, demoTwin.role, demoTwin.personalProfile);
       const project = await findOrCreateProject(
         supabase,
+        ownerId,
         twin.id,
         demoTwin.project.name,
         demoTwin.project.description,

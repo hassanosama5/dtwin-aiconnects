@@ -1,45 +1,32 @@
 /**
  * useInterview
  *
- * Drives the full two-stage onboarding conversation: a short Personal
- * Decision Profile interview, then an automatic, same-session transition
- * into a Project Context interview once the personal profile is code-
- * verified complete. Owns all orchestration (Coordinator calls, field
- * accumulation, stage transition, completion) so screens only render state
- * and call sendMessage()/selectSuggestion().
+ * Drives the Personal Decision Profile conversation for Create Twin. Owns
+ * all orchestration (Coordinator calls, field accumulation, completion) so
+ * the screen only renders state and calls sendMessage().
  *
  * Validation and persistence are NOT re-implemented here -- InterviewAgent's
- * postProcess() already runs ValidationTool and saves via ProfileTool/
- * ProjectTool once each stage's fields are code-verified complete. This
- * hook only needs to react to `complete` and merge `extracted` each turn.
+ * postProcess() already runs ValidationTool and saves via ProfileTool once
+ * the fields are code-verified complete. This hook only needs to react to
+ * `complete` and merge `extracted` each turn.
  *
- * Optionally seeded with an existing `twinId` + starting `stage` (see
- * UseInterviewOptions) -- used by Create Project to add a project to an
- * already-created twin, skipping the personal-profile stage entirely
- * instead of running the whole two-stage flow again.
+ * Single-stage only: this used to auto-transition into a second "Project
+ * Context" interview stage after the personal profile completed, but
+ * Projects are an independent workspace now, created via a plain form
+ * (app/project/create.tsx) with no agent involved at all — see
+ * tools/project.ts. Chaining a project interview after Twin creation would
+ * have been exactly the stale, conflicting flow that redesign replaced.
  */
 
 import { useCallback, useRef, useState } from 'react';
 import { createAgentRegistry } from '../agents/AgentRegistry';
 import { InterviewMessage } from '../types/conversation';
 
-export type InterviewStage = 'personal' | 'project';
-
-export interface UseInterviewOptions {
-  /** Pre-seeds an existing twin so the first turn already has a twinId to
-   *  save against -- required when `stage` is 'project'. */
-  twinId?: string;
-  /** Defaults to 'personal' (new twin). Pass 'project' with `twinId` to add
-   *  a project to a twin that already exists. */
-  stage?: InterviewStage;
-}
-
 export interface UseInterviewResult {
   messages: InterviewMessage[];
   isLoading: boolean;
   isComplete: boolean;
   error: string | null;
-  stage: InterviewStage;
   progress: { collected: number; total: number } | null;
   suggestions: string[];
   /** Kicks off the interview with the agent's first question. Idempotent. */
@@ -51,125 +38,76 @@ export interface UseInterviewResult {
 // never per-render. See ARCHITECTURE.md.
 const registry = createAgentRegistry();
 
-const KICKOFF_MESSAGE: Record<InterviewStage, string> = {
-  personal: "Hi, I'd like to create my Decision Twin.",
-  project: "Let's set up my first project.",
-};
-
-const TRANSITION_MESSAGE =
-  "Great — that's your Decision Profile. Now let's set up your first project.";
+const KICKOFF_MESSAGE = "Hi, I'd like to create my Decision Twin.";
 
 function makeId(role: 'agent' | 'user'): string {
   return `${role}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
-export function useInterview(options?: UseInterviewOptions): UseInterviewResult {
-  const initialStage = options?.stage ?? 'personal';
-
+export function useInterview(): UseInterviewResult {
   const [messages, setMessages] = useState<InterviewMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isComplete, setIsComplete] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [stage, setStage] = useState<InterviewStage>(initialStage);
   const [progress, setProgress] = useState<{ collected: number; total: number } | null>(null);
   const [suggestions, setSuggestions] = useState<string[]>([]);
 
-  // Full visible transcript, for the UI. Never reset.
   const messagesRef = useRef<InterviewMessage[]>([]);
-  // Current-stage-only transcript, sent to the Interview Agent. Reset on
-  // stage transition -- InterviewAgent counts agent turns in this list to
-  // know how many fields it's already asked about *in this stage*.
-  const stageMessagesRef = useRef<InterviewMessage[]>([]);
   const collectedFieldsRef = useRef<Record<string, string | string[]>>({});
-  const twinIdRef = useRef<string | undefined>(options?.twinId);
-  const stageRef = useRef<InterviewStage>(initialStage);
   const hasStarted = useRef(false);
 
-  const appendVisible = useCallback((message: InterviewMessage) => {
+  const appendMessage = useCallback((message: InterviewMessage) => {
     messagesRef.current = [...messagesRef.current, message];
     setMessages(messagesRef.current);
   }, []);
 
-  const appendStageMessage = useCallback(
-    (message: InterviewMessage) => {
-      stageMessagesRef.current = [...stageMessagesRef.current, message];
-      appendVisible(message);
-    },
-    [appendVisible]
-  );
+  const runTurn = useCallback(async (transcript: InterviewMessage[]) => {
+    setIsLoading(true);
+    setError(null);
 
-  const runTurn = useCallback(
-    async (stageTranscript: InterviewMessage[]) => {
-      setIsLoading(true);
-      setError(null);
+    const latest = transcript[transcript.length - 1];
+    const message = latest ? latest.content : KICKOFF_MESSAGE;
 
-      const currentStage = stageRef.current;
-      const activeWorkflow = currentStage === 'personal' ? 'CREATE_TWIN' : 'CREATE_PROJECT';
-      const latest = stageTranscript[stageTranscript.length - 1];
-      const message = latest ? latest.content : KICKOFF_MESSAGE[currentStage];
+    const result = await registry.coordinator.execute({
+      message,
+      activeWorkflow: 'CREATE_TWIN',
+      messages: transcript.map((m) => ({ role: m.role, content: m.content })),
+      collectedFields: collectedFieldsRef.current,
+    });
 
-      const result = await registry.coordinator.execute({
-        message,
-        activeWorkflow,
-        messages: stageTranscript.map((m) => ({ role: m.role, content: m.content })),
-        collectedFields: collectedFieldsRef.current,
-        context: twinIdRef.current ? { twinId: twinIdRef.current } : undefined,
+    setIsLoading(false);
+
+    if (!result.success || result.output.workflow === 'CHAT') {
+      setError(result.error ?? 'Something went wrong. Please try again.');
+      return;
+    }
+
+    const { interview } = result.output;
+
+    // Replace, not merge -- interview.collectedFields is already the full,
+    // normalized, accumulated state (see agents/interview.ts). Merging a
+    // delta here was the bug: a value normalized on one turn would never
+    // be re-normalized once carried forward as a stale raw copy.
+    if (interview.collectedFields) {
+      collectedFieldsRef.current = interview.collectedFields;
+    }
+    setSuggestions(interview.suggestions ?? []);
+    setProgress(interview.progress ?? null);
+
+    if (interview.complete) {
+      setIsComplete(true);
+      return;
+    }
+
+    if (interview.nextQuestion) {
+      appendMessage({
+        id: makeId('agent'),
+        role: 'agent',
+        content: interview.nextQuestion,
+        timestamp: new Date(),
       });
-
-      setIsLoading(false);
-
-      if (!result.success || result.output.workflow === 'CHAT') {
-        setError(result.error ?? 'Something went wrong. Please try again.');
-        return;
-      }
-
-      const { interview } = result.output;
-
-      // Replace, not merge -- interview.collectedFields is already the full,
-      // normalized, accumulated state (see agents/interview.ts). Merging a
-      // delta here was the bug: a value normalized on one turn would never
-      // be re-normalized once carried forward as a stale raw copy.
-      if (interview.collectedFields) {
-        collectedFieldsRef.current = interview.collectedFields;
-      }
-      setSuggestions(interview.suggestions ?? []);
-      setProgress(interview.progress ?? null);
-
-      if (interview.complete) {
-        if (interview.twinId) twinIdRef.current = interview.twinId;
-
-        if (currentStage === 'personal') {
-          stageRef.current = 'project';
-          setStage('project');
-          collectedFieldsRef.current = {};
-          stageMessagesRef.current = [];
-          setProgress(null);
-          setSuggestions([]);
-          appendVisible({
-            id: makeId('agent'),
-            role: 'agent',
-            content: TRANSITION_MESSAGE,
-            timestamp: new Date(),
-          });
-          void runTurn([]);
-          return;
-        }
-
-        setIsComplete(true);
-        return;
-      }
-
-      if (interview.nextQuestion) {
-        appendStageMessage({
-          id: makeId('agent'),
-          role: 'agent',
-          content: interview.nextQuestion,
-          timestamp: new Date(),
-        });
-      }
-    },
-    [appendVisible, appendStageMessage]
-  );
+    }
+  }, [appendMessage]);
 
   const start = useCallback(() => {
     if (hasStarted.current) return;
@@ -182,15 +120,15 @@ export function useInterview(options?: UseInterviewOptions): UseInterviewResult 
       const trimmed = content.trim();
       if (!trimmed || isLoading || isComplete) return;
 
-      appendStageMessage({
+      appendMessage({
         id: makeId('user'),
         role: 'user',
         content: trimmed,
         timestamp: new Date(),
       });
-      void runTurn(stageMessagesRef.current);
+      void runTurn(messagesRef.current);
     },
-    [isLoading, isComplete, appendStageMessage, runTurn]
+    [isLoading, isComplete, appendMessage, runTurn]
   );
 
   return {
@@ -198,7 +136,6 @@ export function useInterview(options?: UseInterviewOptions): UseInterviewResult 
     isLoading,
     isComplete,
     error,
-    stage,
     progress,
     suggestions,
     start,

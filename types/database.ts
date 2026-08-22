@@ -10,6 +10,7 @@ import { PersonProfile, ProjectProfile } from './profile';
 // Twin table
 export interface Twin {
   id: string;
+  owner_id: string | null;
   name: string;
   role: string;
   avatar_url: string | null;
@@ -18,16 +19,20 @@ export interface Twin {
 }
 
 export interface TwinInsert {
+  owner_id: string;
   name: string;
   role: string;
   avatar_url?: string | null;
   personal_profile: PersonProfile;
 }
 
-// Project table
+// Project table -- independent of any one Twin. twin_id is an optional
+// "default/suggested twin" hint, not a required binding; which Twin
+// actually answers is chosen at chat-time (see hooks/useChat.ts).
 export interface Project {
   id: string;
-  twin_id: string;
+  owner_id: string | null;
+  twin_id: string | null;
   name: string;
   description: string | null;
   project_profile: ProjectProfile;
@@ -35,7 +40,8 @@ export interface Project {
 }
 
 export interface ProjectInsert {
-  twin_id: string;
+  owner_id: string;
+  twin_id?: string | null;
   name: string;
   description?: string | null;
   project_profile: ProjectProfile;
@@ -64,6 +70,10 @@ export interface MessageMetadata {
   confidence?: number;
   requiresHuman?: boolean;
   agentExecutionTime?: number;
+  // Which Twin answered this turn -- recorded at save time since Projects
+  // are independent of Twins now (project.twin_id is not reliable), see
+  // tools/conversation.ts's getRecentConversations().
+  twinId?: string;
 }
 
 // Database schema type

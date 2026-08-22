@@ -9,32 +9,62 @@ module.exports = {
     extend: {
       colors: {
         primary: {
-          50: '#f0f9ff',
-          100: '#e0f2fe',
-          200: '#bae6fd',
-          300: '#7dd3fc',
-          400: '#38bdf8',
-          500: '#0ea5e9',
-          600: '#0284c7',
-          700: '#0369a1',
-          800: '#075985',
-          900: '#0c4a6e',
+          50: '#0d0e3d',
+          100: '#1a1b57',
+          200: '#2b2d72',
+          300: '#383a94',
+          400: '#4648d4',
+          500: '#4648d4',
+          600: '#4648d4',
+          700: '#9294f5',
+          800: '#c0c1ff',
+          900: '#e1e0ff',
         },
+        // Kept for any lingering `ink-900` reference — aliased to white now
+        // that the app is dark-only (was the brand navy on a light theme).
+        ink: {
+          900: '#ffffff',
+          800: '#ffffff',
+          700: '#c6c6c6',
+        },
+        // Dark-theme surfaces/text, named to match the source design spec.
+        background: '#000000',
+        surface: '#0e0e0e',
+        'surface-high': '#1b1b1b',
+        'surface-highest': '#2d3133',
+        'surface-border': '#2d3133',
+        outline: '#848484',
+        'on-surface': '#ffffff',
+        'on-surface-variant': '#c6c6c6',
+        // Legacy `gray-*` ramp — unused in new code, kept only so a missed
+        // reference renders dark instead of crashing. Prefer the tokens above.
         gray: {
-          50: '#f9fafb',
-          100: '#f3f4f6',
-          200: '#e5e7eb',
-          300: '#d1d5db',
-          400: '#9ca3af',
-          500: '#6b7280',
-          600: '#4b5563',
-          700: '#374151',
-          800: '#1f2937',
-          900: '#111827',
+          50: '#0e0e0e',
+          100: '#1b1b1b',
+          200: '#2d3133',
+          300: '#474747',
+          400: '#848484',
+          500: '#a8a8a8',
+          600: '#c6c6c6',
+          700: '#e5e5e5',
+          800: '#f3f4f6',
+          900: '#ffffff',
         },
       },
       fontFamily: {
+        // Deliberately System, not a loaded Inter font file: React Native
+        // requires a SEPARATE font file per weight for custom fonts (no
+        // "fontWeight" synthesis the way CSS web has for variable fonts),
+        // so forcing one Inter file as the global default would silently
+        // flatten every font-semibold/font-bold heading across the app to
+        // regular weight. System (San Francisco/Roboto) already renders
+        // fontWeight correctly and reads visually close to Inter.
         sans: ['System'],
+      },
+      borderRadius: {
+        DEFAULT: '2px',
+        lg: '4px',
+        xl: '8px',
       },
     },
   },

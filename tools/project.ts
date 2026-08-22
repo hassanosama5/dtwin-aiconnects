@@ -11,21 +11,28 @@ import { logger } from '../utils/logger';
 import { Tool } from './types';
 
 /**
- * Save a project profile
+ * Save a project profile. Not agent-driven -- this is called directly from
+ * a plain form (app/project/create.tsx). `twinId` is optional: a Project is
+ * an independent workspace, not owned by one Twin; which Twin answers
+ * questions about it is chosen at chat-time, not fixed at creation.
  */
 export async function saveProjectProfile(
-  twinId: string,
-  name: string,
   profile: ProjectProfile,
-  description?: string
+  twinId?: string
 ): Promise<{ success: true; project: Project } | { success: false; error: string }> {
   try {
-    logger.info('Saving project profile', { twinId, name });
+    logger.info('Saving project profile', { title: profile.title, twinId });
+
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (userError || !userData.user) {
+      throw new Error('Must be signed in to create a project');
+    }
 
     const projectData: ProjectInsert = {
-      twin_id: twinId,
-      name,
-      description: description || null,
+      owner_id: userData.user.id,
+      twin_id: twinId ?? null,
+      name: profile.title,
+      description: profile.description || null,
       project_profile: profile,
     };
 
@@ -105,6 +112,39 @@ export async function listProjects(
   }
 }
 
+/** A project joined with its owning twin's display info -- for screens that
+ *  list projects across every twin (the Projects tab, Home's quick view)
+ *  rather than one twin's own project list. */
+export interface ProjectWithTwin extends Project {
+  twins: { name: string; avatar_url: string | null } | null;
+}
+
+/**
+ * List every project across every twin, newest first.
+ */
+export async function listAllProjects(): Promise<
+  { success: true; projects: ProjectWithTwin[] } | { success: false; error: string }
+> {
+  try {
+    logger.info('Loading all projects');
+
+    const { data, error } = await supabase
+      .from('projects')
+      .select('*, twins(name, avatar_url)')
+      .order('created_at', { ascending: false }) as { data: ProjectWithTwin[] | null; error: any };
+
+    if (error) throw error;
+
+    return { success: true, projects: data || [] };
+  } catch (error) {
+    logger.error('Failed to load all projects', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+  }
+}
+
 /**
  * ProjectTool
  *
@@ -116,10 +156,12 @@ export const ProjectTool: Tool & {
   save: typeof saveProjectProfile;
   get: typeof getProjectProfile;
   list: typeof listProjects;
+  listAll: typeof listAllProjects;
 } = {
   name: 'ProjectTool',
   description: 'Save, load, and list project profiles for a Decision Twin.',
   save: saveProjectProfile,
   get: getProjectProfile,
   list: listProjects,
+  listAll: listAllProjects,
 };

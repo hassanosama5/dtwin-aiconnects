@@ -1,13 +1,18 @@
 /**
  * Create Twin Screen
  *
- * Conversational two-stage onboarding -- Personal Decision Profile, then an
- * automatic transition into Project Context -- no traditional form. All
- * orchestration (Coordinator, Interview Agent, field tracking, stage
- * transition, validation, save) lives in useInterview(); this screen only
- * renders state and forwards user input. Real Supabase persistence via
- * ProfileTool/ProjectTool -- not the mock in-memory registry other
- * placeholder screens use, since this flow already has a working backend.
+ * Conversational Personal Decision Profile onboarding -- no traditional
+ * form. All orchestration (Coordinator, Interview Agent, field tracking,
+ * validation, save) lives in useInterview(); this screen only renders
+ * state and forwards user input. Real Supabase persistence via
+ * ProfileTool -- not the mock in-memory registry other placeholder screens
+ * use, since this flow already has a working backend.
+ *
+ * Exactly one header: the native Stack header is hidden (see
+ * app/_layout.tsx) and this screen's own header (with its own back button)
+ * is the single source of truth. It used to render both at once -- the
+ * native "Create Decision Twin" title bar overlapping this screen's own
+ * "Building your Decision Profile" heading directly beneath it.
  */
 
 import React, { useEffect, useRef, useState } from 'react';
@@ -17,6 +22,7 @@ import {
   TextInput,
   ScrollView,
   KeyboardAvoidingView,
+  Keyboard,
   Platform,
   TouchableOpacity,
 } from 'react-native';
@@ -34,19 +40,9 @@ import { ProgressBar } from '../../components/chat/ProgressBar';
 import { SuggestionChips } from '../../components/chat/SuggestionChips';
 import { theme } from '../../constants/theme';
 
-const STAGE_LABEL = {
-  personal: 'Building your Decision Profile',
-  project: 'Project Context',
-} as const;
-
-const STAGE_SUBTITLE = {
-  personal: 'A few questions about how you make decisions.',
-  project: "Now let's set the context for your first project.",
-} as const;
-
 export default function CreateTwinScreen() {
   const router = useRouter();
-  const { messages, isLoading, isComplete, error, stage, progress, suggestions, start, sendMessage } =
+  const { messages, isLoading, isComplete, error, progress, suggestions, start, sendMessage } =
     useInterview();
   const [draft, setDraft] = useState('');
   const scrollRef = useRef<ScrollView>(null);
@@ -58,6 +54,15 @@ export default function CreateTwinScreen() {
   useEffect(() => {
     scrollRef.current?.scrollToEnd({ animated: true });
   }, [messages, isLoading, suggestions]);
+
+  // Keep the latest question/answer in view the instant the keyboard opens.
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const sub = Keyboard.addListener(showEvent, () => {
+      scrollRef.current?.scrollToEnd({ animated: true });
+    });
+    return () => sub.remove();
+  }, []);
 
   useEffect(() => {
     if (!isComplete) return;
@@ -73,11 +78,11 @@ export default function CreateTwinScreen() {
 
   if (isComplete) {
     return (
-      <SafeAreaView className="flex-1 bg-white items-center justify-center px-8">
-        <Text className="text-lg font-semibold text-gray-900 mb-2">
+      <SafeAreaView className="flex-1 bg-background items-center justify-center px-8">
+        <Text className="text-lg font-semibold text-on-surface mb-2">
           Creating your Decision Twin…
         </Text>
-        <Text className="text-sm text-gray-500 text-center">Saving what you've shared.</Text>
+        <Text className="text-sm text-on-surface-variant text-center">Saving what you've shared.</Text>
       </SafeAreaView>
     );
   }
@@ -86,18 +91,25 @@ export default function CreateTwinScreen() {
 
   return (
     <KeyboardAvoidingView
-      className="flex-1 bg-white"
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+      className="flex-1 bg-background"
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <SafeAreaView className="flex-1">
-        <View className="border-b border-gray-100">
-          {progress && (
-            <ProgressBar label={STAGE_LABEL[stage]} collected={progress.collected} total={progress.total} />
-          )}
-          <View className="px-6 pt-1 pb-3">
-            <Text className="text-sm text-gray-500">{STAGE_SUBTITLE[stage]}</Text>
+        <View className="border-b border-surface-border">
+          <View className="flex-row items-center px-2 pt-2">
+            <TouchableOpacity onPress={() => router.back()} hitSlop={8} accessibilityLabel="Back">
+              <Ionicons name="chevron-back" size={24} color={theme.colors.textPrimary} />
+            </TouchableOpacity>
           </View>
+          <View className="px-6 pt-1 pb-2">
+            <Text className="text-xl font-semibold text-on-surface">Building your Decision Profile</Text>
+            <Text className="text-sm text-on-surface-variant mt-1">
+              A few questions about how you make decisions.
+            </Text>
+          </View>
+          {progress && (
+            <ProgressBar label="Progress" collected={progress.collected} total={progress.total} />
+          )}
         </View>
 
         <ScrollView
@@ -105,6 +117,7 @@ export default function CreateTwinScreen() {
           className="flex-1 px-5"
           contentContainerStyle={{ paddingVertical: 16, gap: 12 }}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
         >
           {messages.map((message) => (
             <MessageBubble key={message.id} role={message.role} content={message.content} />
@@ -112,35 +125,40 @@ export default function CreateTwinScreen() {
           {isLoading && <TypingIndicator />}
         </ScrollView>
 
-        {error && (
-          <View className="px-5 pb-2">
-            <Text className="text-sm text-red-500">{error}</Text>
+        {/* Composer dock — chips sit directly above the input as quick
+            actions on the same surface, not a detached row with its own
+            divider. */}
+        <View className="border-t border-surface-border bg-background">
+          {error && (
+            <View className="px-5 pt-2">
+              <Text className="text-sm text-red-500">{error}</Text>
+            </View>
+          )}
+
+          {!isLoading && (
+            <SuggestionChips suggestions={suggestions} onSelect={handleSend} disabled={isLoading} />
+          )}
+
+          <View className="flex-row items-end px-4 pt-1 pb-3 gap-2">
+            <TextInput
+              value={draft}
+              onChangeText={setDraft}
+              placeholder="Type your answer..."
+              placeholderTextColor={theme.colors.textTertiary}
+              multiline
+              editable={!isLoading}
+              className="flex-1 bg-surface-high rounded-2xl px-4 py-3 text-base text-on-surface max-h-28"
+            />
+            <TouchableOpacity
+              onPress={() => handleSend(draft)}
+              disabled={!canSend}
+              className={`w-11 h-11 rounded-full items-center justify-center ${
+                canSend ? 'bg-primary-600' : 'bg-surface-highest'
+              }`}
+            >
+              <Ionicons name="arrow-up" size={20} color={canSend ? theme.colors.textInverse : theme.colors.textTertiary} />
+            </TouchableOpacity>
           </View>
-        )}
-
-        {!isLoading && (
-          <SuggestionChips suggestions={suggestions} onSelect={handleSend} disabled={isLoading} />
-        )}
-
-        <View className="flex-row items-end px-4 py-3 border-t border-gray-100 gap-2">
-          <TextInput
-            value={draft}
-            onChangeText={setDraft}
-            placeholder="Type your answer..."
-            placeholderTextColor={theme.colors.gray[400]}
-            multiline
-            editable={!isLoading}
-            className="flex-1 bg-gray-100 rounded-2xl px-4 py-3 text-base text-gray-900 max-h-28"
-          />
-          <TouchableOpacity
-            onPress={() => handleSend(draft)}
-            disabled={!canSend}
-            className={`w-11 h-11 rounded-full items-center justify-center ${
-              canSend ? 'bg-primary-600' : 'bg-gray-200'
-            }`}
-          >
-            <Ionicons name="arrow-up" size={20} color={canSend ? '#ffffff' : theme.colors.gray[400]} />
-          </TouchableOpacity>
         </View>
       </SafeAreaView>
     </KeyboardAvoidingView>

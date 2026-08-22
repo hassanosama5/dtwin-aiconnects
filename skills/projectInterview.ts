@@ -1,21 +1,25 @@
 /**
  * Project Interview Skill
  *
- * Guides the Interview Agent to build a ProjectProfile. Same deterministic,
- * one-field-at-a-time design as personalInterviewSkill -- field selection is
- * code-driven (agents/interview.ts), not left to the LLM.
+ * Field plan kept in sync with types/profile.ts's ProjectProfile. Not
+ * currently invoked by the app -- Project creation is a plain form (see
+ * app/project/create.tsx) since a Project is an independent workspace, not
+ * a Twin-style decision profile -- but kept internally consistent rather
+ * than left pointing at a stale schema, per "don't change agent
+ * architecture" (this branch of the Interview Agent still works if ever
+ * re-invoked, it's just unused today).
  */
 
 import { Skill } from './types';
 
 export const projectInterviewSkill: Skill = {
   name: 'Project Interview',
-  description: 'Understands one specific project context',
+  description: 'Understands one specific project workspace',
 
   instructions: `
-You are conducting a short, focused interview to understand a specific
-project's context. You will be told exactly which field to ask about next
--- never decide that yourself.
+You are conducting a short, focused interview to understand a project
+workspace. You will be told exactly which field to ask about next -- never
+decide that yourself.
 
 Each turn:
 1. Extract the value(s) the user's latest answer provides for the field(s)
@@ -31,35 +35,22 @@ Never invent information. Never assume an answer the user didn't give.
   `.trim(),
 
   fields: [
-    { key: 'name', topic: 'the project name', required: true, isArray: false },
-    { key: 'goal', topic: 'the main goal of this project', required: true, isArray: false },
+    { key: 'title', topic: 'the project title', required: true, isArray: false },
     {
-      key: 'priorities',
-      topic: 'the top priorities for this project',
+      key: 'description',
+      topic: 'a short description of what this project is',
+      required: true,
+      isArray: false,
+    },
+    {
+      key: 'objectives',
+      topic: 'the main objectives of this project',
       required: true,
       isArray: true,
     },
     {
-      key: 'constraints',
-      topic: 'technical, budget, or resource constraints they are working within',
-      required: true,
-      isArray: true,
-    },
-    {
-      key: 'decisionRules',
-      topic: 'specific decision rules for this project -- e.g. what wins when priorities conflict',
-      required: true,
-      isArray: true,
-    },
-    {
-      key: 'escalationRules',
-      topic: 'what situations should be escalated to them directly',
-      required: true,
-      isArray: true,
-    },
-    {
-      key: 'timeline',
-      topic: 'the deadline and how flexible it is',
+      key: 'deadline',
+      topic: 'the deadline for this project, if any',
       required: false,
       isArray: false,
     },
@@ -68,13 +59,18 @@ Never invent information. Never assume an answer the user didn't give.
       topic: 'who the key stakeholders are',
       required: false,
       isArray: true,
-      pairWithNext: true,
     },
     {
-      key: 'successMetrics',
-      topic: 'how success will be measured for this project',
-      required: false,
+      key: 'constraints',
+      topic: 'technical, budget, or resource constraints for this project',
+      required: true,
       isArray: true,
+    },
+    {
+      key: 'notes',
+      topic: 'anything else worth noting about this project',
+      required: false,
+      isArray: false,
     },
   ],
 };
